@@ -187,7 +187,7 @@ impl Parser {
             }
         }
         Ok(cc)
-    } 
+    }
 
     /// Parses a pipeline statement.
     fn parse_pipeline(self: &mut Self) -> Result<Pipeline> {
@@ -304,16 +304,12 @@ impl Parser {
     fn read(self: &mut Self) -> Result<lexer::Token> {
         match self.tokens.pop_front() {
             None => Err(Error::new("unexpected end of input")),
-            Some(token) => {
-                eprintln!("sh: read {:?}", token);
-                Ok(token)
-            }
+            Some(token) => Ok(token),
         }
     }
 
     /// Unreads a token putting it back into the input stream.
     fn unread(self: &mut Self, token: lexer::Token) {
-        eprintln!("sh: unread {:?}", token);
         self.tokens.push_front(token);
     }
 }

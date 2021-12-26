@@ -72,8 +72,7 @@ impl Lexer {
     /// runs the scanner.
     fn run(self: &mut Self) {
         loop {
-            if let Some(c) = self.peek() {
-                self.advance();
+            if let Some(c) = self.read() {
                 let end_of_line = self.process_current(c);
                 if end_of_line {
                     break;
@@ -105,12 +104,12 @@ impl Lexer {
         } else if c == '<' {
             self.leave_and_push_back(Kind::Minor);
         } else if c == '>' {
-            if let Some(c) = self.peek() {
+            if let Some(c) = self.read() {
                 if c == '>' {
-                    self.advance();
                     self.leave_and_push_back(Kind::MajorMajor);
                 } else {
                     self.leave_and_push_back(Kind::Major);
+                    self.unread(c)
                 }
             } else {
                 self.leave_and_push_back(Kind::Major);
@@ -122,23 +121,14 @@ impl Lexer {
         return at_eol;
     }
 
-    // TODO: rewrite using read/unread instead of peek/avance
-
-    /// peek returns the next character in input without
-    /// advancing the input iterator. Returns None in case
-    /// we've reached the end of line (EOL).
-    fn peek(self: &mut Self) -> Option<char> {
-        match self.input.front() {
-            None => None,
-            Some(c) => Some(*c),
-        }
+    /// read returns the next character in input or None on EOL.
+    fn read(self: &mut Self) -> Option<char> {
+        self.input.pop_front()
     }
 
-    /// advance discards the current input character. You
-    /// MUST call this function after you've called peek and
-    /// you already know we've not reached EOL.
-    fn advance(self: &mut Self) {
-        let _ = self.input.pop_front();
+    /// unread puts a character back into the input stream.
+    fn unread(self: &mut Self, c: char) {
+        self.input.push_front(c);
     }
 
     /// enters or continues to be inside a CommandOrArgument token
