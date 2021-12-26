@@ -1,3 +1,5 @@
+//! Scanner implementation.
+
 use std::collections::VecDeque;
 
 /// Kind of a scanned token.
@@ -119,6 +121,8 @@ impl Lexer {
         }
         return at_eol;
     }
+
+    // TODO: rewrite using read/unread instead of peek/avance
 
     /// peek returns the next character in input without
     /// advancing the input iterator. Returns None in case
