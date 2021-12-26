@@ -16,9 +16,7 @@ fn main() {
             continue;
         }
         let tokens = lexer::scan(cmd);
-        for tok in tokens {
-            println!("- {:?}", tok);
-        }
+        println!("sh: tokens: {:?}", tokens);
     }
 }
 
