@@ -36,8 +36,8 @@ portion of the parse tree using [src/serializer.rs](src/serializer.rs).
 
 The `-x` command line argument turns verbose mode on.
 
-The `--stage STAGE` command allows you to stop processing at the
-given `STAGE` and see internal data structures.
+The `--stage STAGE` flag stops processing at the given `STAGE`
+and shows internal data structures.
 
 The `-c COMMANDS` command allows a shell (or a sub-shell) to
 execute a sequence of commands.
