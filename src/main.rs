@@ -1,3 +1,4 @@
+mod interp;
 mod lexer;
 mod model;
 mod parser;
@@ -44,9 +45,9 @@ fn shrun_internal(cmd: String) -> Result<()> {
     println!("sh: tokens: {:?}", tokens);
     let tree = parser::parse(tokens)?;
     println!("sh: pass #1 tree: {:?}", tree);
-    let tree = translator::translate(tree)?;
-    println!("sh: pass #2 tree: {:?}", tree);
-    Ok(())
+    let loc = translator::translate(tree)?;
+    println!("sh: pass #2 tree: {:?}", loc);
+    interp::interpret(loc)
 }
 
 /// Reads a command from the standard input.
