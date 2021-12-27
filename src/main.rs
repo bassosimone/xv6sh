@@ -67,7 +67,7 @@ fn shrun(cmd: String, stage: &String) -> Result<()> {
     }
     let loc = translator::translate(tree)?;
     if stage == "plan" {
-        eprintln!("{:#?}", loc);
+        println!("{:#?}", loc);
         return Ok(());
     }
     interp::interpret(loc)

@@ -18,25 +18,29 @@ cargo run
 
 The design is quite traditional for a compiler-like tool:
 
-1. there is a lexer (see [src/lexer.rs](src/lexer.rs));
+1. there is a lexer (see [src/lexer.rs](src/lexer.rs)) that
+implements the `scan` stage;
 
 2. the lexer feeds a parser (see [src/parser.rs](src/parser.rs)),
-which produces a _parse tree_;
+which produces a _parse tree_ in the `parse` stage;
 
-3. we transform and validate the parse tree for easier execution
-(see [src/translator.rs](src/translator.rs));
+3. we validate the parse tree and transform it for easier execution
+(see [src/translator.rs](src/translator.rs)) in the `plan` stage;
 
 4. we interpret the transformed output (see [src/interp.rs](src/interp.rs))
-to execute shell commands.
+to execute shell commands in the `run` stage.
 
 When we encounter commands between `(` and `)` we execute them in
 a subshell. We pass code to the subshell by serializing the specific
 portion of the parse tree using [src/serializer.rs](src/serializer.rs).
 
+The `-x` command line argument turns verbose mode on.
+
+The `--stage STAGE` command allows you to stop processing at the
+given `STAGE` and see internal data structures.
+
 The `-c COMMANDS` command allows a shell (or a sub-shell) to
 execute a sequence of commands.
-
-The `-x` command line argument turns verbose mode on.
 
 ## License
 

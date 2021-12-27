@@ -183,7 +183,6 @@ impl Parser {
                     break;
                 }
                 _ => {
-                    eprintln!("found {:?}", token);
                     return Err(Error::new("expected ;&) or EOL"));
                 }
             }
