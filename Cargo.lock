@@ -3,14 +3,23 @@
 version = 3
 
 [[package]]
-name = "text_io"
+name = "getopts"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14dbbfd5c71d70241ecf9e6f13737f7b5ce823821063188d7e46c41d371eebd5"
+dependencies = [
+ "unicode-width",
+]
+
+[[package]]
+name = "unicode-width"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee74b5019b48991b09803402aaf9e65a053b3993fe9d9c475ab67a395358ba76"
+checksum = "3ed742d4ea2bd1176e236172c8429aaf54486e7ac098db29ffe6529e0ce50973"
 
 [[package]]
 name = "xv6sh"
 version = "0.1.0"
 dependencies = [
- "text_io",
+ "getopts",
 ]

@@ -1,6 +1,7 @@
 //! Parser implementation.
 
 use crate::lexer;
+use crate::model::{Error, Result};
 use std::collections::VecDeque;
 
 /// A complete command in the shell grammar:
@@ -8,7 +9,7 @@ use std::collections::VecDeque;
 ///     CompleteCommand ::= CompleteCommand ";" Pipeline | Pipeline
 #[derive(Debug)]
 pub struct CompleteCommand {
-    pub pipelines: Vec<Pipeline>,
+    pub pipelines: VecDeque<Pipeline>,
 }
 
 /// A pipeline of commands in the shell grammar:
@@ -16,7 +17,7 @@ pub struct CompleteCommand {
 ///     Pipeline ::= Pipeline "|" Command | Command
 #[derive(Debug)]
 pub struct Pipeline {
-    pub commands: Vec<Command>,
+    pub commands: VecDeque<Command>,
 }
 
 /// A command in the shell grammar:
@@ -33,7 +34,7 @@ pub enum Command {
 ///     SimpleCommand ::= Arguments RedirectList
 #[derive(Debug)]
 pub struct SimpleCommand {
-    pub arguments: Vec<String>,
+    pub arguments: VecDeque<String>,
     pub redirs: RedirectList,
 }
 
@@ -71,15 +72,6 @@ pub struct OutputRedir {
     pub overwrite: bool,
 }
 
-/// Error emitted during parsing.
-#[derive(Debug)]
-pub struct Error {
-    reason: String,
-}
-
-/// Result of parsing.
-pub type Result<T> = std::result::Result<T, Error>;
-
 /// Parses the incoming sequence of tokens.
 pub fn parse(tokens: VecDeque<lexer::Token>) -> Result<CompleteCommand> {
     let mut parser = Parser::new(tokens);
@@ -90,28 +82,11 @@ pub fn parse(tokens: VecDeque<lexer::Token>) -> Result<CompleteCommand> {
 // Implementation of public types.
 //
 
-impl Error {
-    /// Creates a new instance of error.
-    fn new(reason: &str) -> Error {
-        Error {
-            reason: String::from(reason),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
-
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "sh: parse error: {}", self.reason)
-    }
-}
-
 impl CompleteCommand {
     /// creates a new instance of CompleteCommand
     fn new() -> CompleteCommand {
         CompleteCommand {
-            pipelines: Vec::<_>::new(),
+            pipelines: VecDeque::<_>::new(),
         }
     }
 }
@@ -120,7 +95,7 @@ impl Pipeline {
     /// creates a new instance of Pipeline
     fn new() -> Pipeline {
         Pipeline {
-            commands: Vec::<_>::new(),
+            commands: VecDeque::<_>::new(),
         }
     }
 }
@@ -129,7 +104,7 @@ impl SimpleCommand {
     /// creates a new instance of SimpleCommand
     fn new() -> SimpleCommand {
         SimpleCommand {
-            arguments: Vec::<_>::new(),
+            arguments: VecDeque::<_>::new(),
             redirs: RedirectList::new(),
         }
     }
@@ -137,7 +112,7 @@ impl SimpleCommand {
 
 impl RedirectList {
     /// creates a new instance of RedirectList
-    fn new() -> RedirectList {
+    pub fn new() -> RedirectList {
         RedirectList {
             input: VecDeque::<_>::new(),
             output: VecDeque::<_>::new(),
@@ -176,7 +151,7 @@ impl Parser {
         let mut cc = CompleteCommand::new();
         loop {
             let pipeline = self.parse_pipeline()?;
-            cc.pipelines.push(pipeline);
+            cc.pipelines.push_back(pipeline);
             let token = self.read()?;
             match token.kind {
                 lexer::Kind::Semicolon => (),
@@ -194,7 +169,7 @@ impl Parser {
         let mut pipeline = Pipeline::new();
         loop {
             let command = self.parse_command()?;
-            pipeline.commands.push(command);
+            pipeline.commands.push_back(command);
             let token = self.read()?;
             match token.kind {
                 lexer::Kind::Pipe => (),
@@ -242,7 +217,7 @@ impl Parser {
             let token = self.read()?;
             match token.kind {
                 lexer::Kind::CommandOrArgument => {
-                    scmd.arguments.push(token.value);
+                    scmd.arguments.push_back(token.value);
                 }
                 _ => {
                     self.unread(token);
