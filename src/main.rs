@@ -1,3 +1,5 @@
+//! Unix v6-like shell written in rust.
+
 mod interp;
 mod lexer;
 mod model;
@@ -7,6 +9,7 @@ mod translator;
 
 use crate::model::{Error, Result};
 
+/// Main function.
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let program = args[0].clone();
