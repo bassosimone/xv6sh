@@ -35,6 +35,12 @@ fn single_command(mut sc: SingleCommand) -> Result<()> {
         return Ok(());
     }
     let argv0 = sc.arguments.pop_front().unwrap(); // cannot fail
+    match argv0.as_str() {
+        "cd" => {
+            return builtin_cd(sc.arguments);
+        }
+        _ => (),
+    }
     let mut cmd = Command::new(argv0);
     while sc.arguments.len() > 0 {
         let arg = sc.arguments.pop_front().unwrap(); // cannot fail
@@ -69,6 +75,16 @@ fn single_command(mut sc: SingleCommand) -> Result<()> {
             let _ = child.wait(); // we don't care about the return value
             Ok(())
         }
+    }
+}
+
+fn builtin_cd(args: VecDeque<String>) -> Result<()> {
+    if args.len() != 1 {
+        return Err(Error::new("usage: cd <directory>"));
+    }
+    match std::env::set_current_dir(&args[0]) {
+        Err(err) => Err(Error::new(&err.to_string())),
+        Ok(_) => Ok(()),
     }
 }
 
