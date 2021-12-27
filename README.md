@@ -6,6 +6,14 @@ I wrote this code to exercise with Rust. I do not plan on maintaining
 this code base or on adding additional features. It's likely the
 case that this code behaves differently from the original v6 shell.
 
+## Building and running
+
+You need `rustc` and `cargo` (possibly via `rustup`). To run:
+
+```bash
+cargo run
+```
+
 ## Design
 
 The design is quite traditional for a compiler-like tool:
