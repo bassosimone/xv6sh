@@ -32,7 +32,8 @@ The `-x` command line argument turns verbose mode on.
 
 ## License
 
-See https://github.com/mit-pdos/xv6-riscv/blob/riscv/user/sh.c for the
+See [mit-pdos/xv6-riscv's sh.c](
+https://github.com/mit-pdos/xv6-riscv/blob/riscv/user/sh.c) for the
 source code that I started from. The implementation diverged
 quite quickly but there are still some ideas of the original code. For
 this reason, the copyright is the original copyright plus my own copyright.
