@@ -7,4 +7,5 @@ edition = "2021"
 
 [dependencies]
 getopts = "0.2"
+once_cell = "1"
 os_pipe = "1"

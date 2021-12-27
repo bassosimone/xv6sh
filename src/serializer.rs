@@ -28,9 +28,14 @@ impl Serializer {
             match pipelines.pop_front() {
                 None => break,
                 Some(p) => {
+                    let syncpipe = p.sync;
                     self.pipeline(p)?;
                     if pipelines.len() > 0 {
-                        self.out.push(';');
+                        if syncpipe {
+                            self.out.push(';');
+                        } else {
+                            self.out.push('&');
+                        }
                     }
                 }
             }

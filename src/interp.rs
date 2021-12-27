@@ -1,6 +1,7 @@
 //! Interprets the executable syntax tree generated
 //! by the translator module (translator.rs).
 
+use crate::background;
 use crate::model::{Error, Result};
 use crate::parser::{InputRedir, OutputRedir};
 use crate::translator::{
@@ -54,7 +55,11 @@ fn single_command(mut sc: SingleCommand) -> Result<()> {
     let rin = maybe_redirect_input(&sc.input)?;
     let rout = maybe_redirect_output(&sc.output)?;
     let mut chld = common_executor(argv0, sc.arguments, rin, rout)?;
-    let _ = chld.wait(); // we don't care about the return value
+    if sc.sync {
+        let _ = chld.wait(); // we don't care about the return value
+    } else {
+        background::add(chld);
+    }
     Ok(())
 }
 
@@ -100,7 +105,11 @@ fn pipelined_commands(pc: PipelinedCommands) -> Result<()> {
             children.push_back(child);
         }
     }
-    wait_for_children(children);
+    if pc.sync {
+        wait_for_children(children);
+    } else {
+        background::addq(children);
+    }
     Ok(())
 }
 

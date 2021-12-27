@@ -28,6 +28,7 @@ pub struct SingleCommand {
     pub arguments: VecDeque<String>,
     pub input: Option<InputRedir>,
     pub output: Option<OutputRedir>,
+    pub sync: bool,
 }
 
 /// A pipeline consisting of a SourceCommand, zero or more
@@ -37,6 +38,7 @@ pub struct PipelinedCommands {
     pub source: SourceCommand,
     pub filters: VecDeque<FilterCommand>,
     pub sink: SinkCommand,
+    pub sync: bool,
 }
 
 /// The source command of a pipeline.
@@ -85,6 +87,7 @@ impl SingleCommand {
             arguments: VecDeque::<_>::new(),
             input: None,
             output: None,
+            sync: false,
         }
     }
 }
@@ -96,6 +99,7 @@ impl PipelinedCommands {
             source: SourceCommand::new(),
             filters: VecDeque::<_>::new(),
             sink: SinkCommand::new(),
+            sync: false,
         }
     }
 }
@@ -164,6 +168,7 @@ impl Translator {
     /// visits each command inside the pipeline.
     fn pipeline(self: &Self, input: Pipeline) -> Result<CompoundSerialCommand> {
         let mut intermediate = VecDeque::<SimpleCommand>::new();
+        let sync = input.sync;
         let mut input = input.commands;
         loop {
             match input.pop_front() {
@@ -179,15 +184,20 @@ impl Translator {
         }
         if intermediate.len() == 1 {
             let f = intermediate.pop_front().unwrap(); // cannot fail
-            return self.single_command(f);
+            return self.single_command(f, sync);
         }
-        self.pipelined_commands(intermediate)
+        self.pipelined_commands(intermediate, sync)
     }
 
     /// produces a single command instance
-    fn single_command(self: &Self, input: SimpleCommand) -> Result<CompoundSerialCommand> {
+    fn single_command(
+        self: &Self,
+        input: SimpleCommand,
+        sync: bool,
+    ) -> Result<CompoundSerialCommand> {
         let mut output = SingleCommand::new();
         output.arguments = input.arguments;
+        output.sync = sync;
         if input.redirs.input.len() > 1 {
             return Err(Error::new("more than one input redirection"));
         }
@@ -207,8 +217,10 @@ impl Translator {
     fn pipelined_commands(
         self: &Self,
         mut input: VecDeque<SimpleCommand>,
+        sync: bool,
     ) -> Result<CompoundSerialCommand> {
         let mut output = PipelinedCommands::new();
+        output.sync = sync;
         output.source = self.new_source(&mut input)?;
         output.filters = self.new_filters(&mut input)?;
         output.sink = self.new_sink(&mut input)?;

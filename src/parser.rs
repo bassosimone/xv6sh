@@ -9,7 +9,9 @@ use std::collections::VecDeque;
 
 /// A complete command in the shell grammar:
 ///
-///     CompleteCommand ::= CompleteCommand ";" Pipeline | Pipeline
+///     CompleteCommand ::= CompleteCommand ";" Pipeline
+///                       | CompleteCommand "&" Pipeline
+///                       | Pipeline
 #[derive(Debug)]
 pub struct CompleteCommand {
     pub pipelines: VecDeque<Pipeline>,
@@ -17,15 +19,18 @@ pub struct CompleteCommand {
 
 /// A pipeline of commands in the shell grammar:
 ///
-///     Pipeline ::= Pipeline "|" Command | Command
+///     Pipeline ::= Pipeline "|" Command
+///                | Command
 #[derive(Debug)]
 pub struct Pipeline {
     pub commands: VecDeque<Command>,
+    pub sync: bool,
 }
 
 /// A command in the shell grammar:
 ///
-///     Command ::= SimpleCommand | Subshell
+///     Command ::= SimpleCommand
+///               | Subshell
 #[derive(Debug)]
 pub enum Command {
     SimpleCommand(SimpleCommand),
@@ -99,6 +104,7 @@ impl Pipeline {
     pub fn new() -> Pipeline {
         Pipeline {
             commands: VecDeque::<_>::new(),
+            sync: false,
         }
     }
 }
@@ -153,14 +159,32 @@ impl Parser {
     fn parse_complete_command(self: &mut Self) -> Result<CompleteCommand> {
         let mut cc = CompleteCommand::new();
         loop {
-            let pipeline = self.parse_pipeline()?;
-            cc.pipelines.push_back(pipeline);
+            let mut pipeline = self.parse_pipeline()?;
             let token = self.read()?;
             match token.kind {
-                lexer::Kind::Semicolon => (),
-                _ => {
+                lexer::Kind::Semicolon => {
+                    pipeline.sync = true;
+                    cc.pipelines.push_back(pipeline);
+                }
+                lexer::Kind::Ampersand => {
+                    pipeline.sync = false;
+                    cc.pipelines.push_back(pipeline);
+                }
+                lexer::Kind::EndOfLine => {
+                    pipeline.sync = true;
+                    cc.pipelines.push_back(pipeline);
                     self.unread(token);
                     break;
+                }
+                lexer::Kind::CloseBrace => {
+                    pipeline.sync = true;
+                    cc.pipelines.push_back(pipeline);
+                    self.unread(token);
+                    break;
+                }
+                _ => {
+                    eprintln!("found {:?}", token);
+                    return Err(Error::new("expected ;&) or EOL"));
                 }
             }
         }
