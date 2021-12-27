@@ -60,13 +60,13 @@ pub struct RedirectList {
 }
 
 /// Describes how to perform input redirection.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InputRedir {
     pub filename: String,
 }
 
 /// Describes how to perform output redirection.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OutputRedir {
     pub filename: String,
     pub overwrite: bool,
@@ -84,7 +84,7 @@ pub fn parse(tokens: VecDeque<lexer::Token>) -> Result<CompleteCommand> {
 
 impl CompleteCommand {
     /// creates a new instance of CompleteCommand
-    fn new() -> CompleteCommand {
+    pub fn new() -> CompleteCommand {
         CompleteCommand {
             pipelines: VecDeque::<_>::new(),
         }
@@ -93,7 +93,7 @@ impl CompleteCommand {
 
 impl Pipeline {
     /// creates a new instance of Pipeline
-    fn new() -> Pipeline {
+    pub fn new() -> Pipeline {
         Pipeline {
             commands: VecDeque::<_>::new(),
         }
@@ -102,7 +102,7 @@ impl Pipeline {
 
 impl SimpleCommand {
     /// creates a new instance of SimpleCommand
-    fn new() -> SimpleCommand {
+    pub fn new() -> SimpleCommand {
         SimpleCommand {
             arguments: VecDeque::<_>::new(),
             redirs: RedirectList::new(),

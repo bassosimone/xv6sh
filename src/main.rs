@@ -1,9 +1,8 @@
-mod compiler;
 mod lexer;
 mod model;
 mod parser;
 mod serializer;
-mod vm;
+mod translator;
 
 use crate::model::{Error, Result};
 
@@ -43,11 +42,11 @@ fn shrun(cmd: String) {
 fn shrun_internal(cmd: String) -> Result<()> {
     let tokens = lexer::scan(cmd);
     println!("sh: tokens: {:?}", tokens);
-    let cc = parser::parse(tokens)?;
-    println!("sh: parse tree: {:?}", cc);
-    let bytecode = compiler::compile(cc)?;
-    println!("sh: bytecode {:?}", bytecode);
-    vm::run(bytecode)
+    let tree = parser::parse(tokens)?;
+    println!("sh: pass #1 tree: {:?}", tree);
+    let tree = translator::translate(tree)?;
+    println!("sh: pass #2 tree: {:?}", tree);
+    Ok(())
 }
 
 /// Reads a command from the standard input.
