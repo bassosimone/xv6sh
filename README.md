@@ -44,7 +44,7 @@ portion of the parse tree using [src/serializer.rs](src/serializer.rs).
 
 ## Command Line Flags
 
-The `-x` command line argument turns verbose mode on.
+The `-x` command line flag prints each command before it's executed.
 
 The `--stage STAGE` flag stops processing at the given `STAGE`
 and shows internal data structures.
