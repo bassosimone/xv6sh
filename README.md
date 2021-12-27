@@ -23,8 +23,10 @@ to execute shell commands.
 
 When we encounter commands between `(` and `)` we execute them in
 a subshell. We pass code to the subshell by serializing the specific
-portion of the parse tree using the `-c COMMANDS` command line
-argument. We serialize using [src/serializer.rs](src/serializer.rs).
+portion of the parse tree using [src/serializer.rs](src/serializer.rs).
+
+The `-c COMMANDS` command allows a shell (or a sub-shell) to
+execute a sequence of commands.
 
 The `-x` command line argument turns verbose mode on.
 
