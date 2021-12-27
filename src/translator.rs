@@ -1,10 +1,10 @@
-//! Translates the syntax tree to an executable syntax tree.
+//! Translates the syntax tree into an executable syntax tree
+//! that the interpreter will then interpret.
 
 use crate::interp;
 use crate::model::{Error, Result};
 use crate::parser::{
-    Command, CompleteCommand, InputRedir, OutputRedir, Pipeline, RedirectList, SimpleCommand,
-    Subshell,
+    Command, CompleteCommand, InputRedir, OutputRedir, Pipeline, SimpleCommand, Subshell,
 };
 use crate::serializer;
 use std::collections::VecDeque;
@@ -59,7 +59,7 @@ pub struct SinkCommand {
     pub output: Option<OutputRedir>,
 }
 
-/// Translates the syntax tree to make it executable.
+/// Translates the syntax tree to make it interpretable.
 pub fn translate(cc: CompleteCommand) -> Result<ListOfCommands> {
     let translator = Translator::new();
     translator.complete_command(cc)
@@ -137,7 +137,7 @@ impl SinkCommand {
 struct Translator {}
 
 impl Translator {
-    /// creates a new compiler
+    /// creates a new translator
     fn new() -> Translator {
         Translator {}
     }
@@ -151,7 +151,7 @@ impl Translator {
                 None => break,
                 Some(pipeline) => {
                     if pipeline.commands.len() < 1 {
-                        continue;
+                        continue; // skip empty pipelines
                     }
                     let pipeline = self.pipeline(pipeline)?;
                     output.pipelines.push_back(pipeline);
@@ -175,7 +175,7 @@ impl Translator {
             }
         }
         if intermediate.len() < 1 {
-            return Err(Error::new("no intermediate command"));
+            return Err(Error::new("no intermediate commands"));
         }
         if intermediate.len() == 1 {
             let f = intermediate.pop_front().unwrap(); // cannot fail
@@ -242,7 +242,7 @@ impl Translator {
         input: &mut VecDeque<SimpleCommand>,
     ) -> Result<VecDeque<FilterCommand>> {
         let mut output = VecDeque::<FilterCommand>::new();
-        while input.len() > 1 {
+        while input.len() > 1 { // note: the last element is the sink
             let e = input.pop_front().unwrap(); // cannot fail
             let mut filter = FilterCommand::new();
             filter.arguments = e.arguments;
@@ -290,7 +290,7 @@ impl Translator {
     fn subshell(self: &Self, input: Subshell) -> Result<SimpleCommand> {
         let mut scmd = SimpleCommand {
             arguments: VecDeque::<_>::new(),
-            redirs: RedirectList::new(),
+            redirs: input.redirs,
         };
         let exe = Self::get_current_exe()?;
         scmd.arguments.push_back(exe);
@@ -308,7 +308,7 @@ impl Translator {
         match std::env::current_exe() {
             Err(err) => Err(Error::new(&err.to_string())),
             Ok(pb) => match pb.to_str() {
-                None => Err(Error::new("sh: unicode decode error")),
+                None => Err(Error::new("unicode decode error")),
                 Some(path) => Ok(String::from(path)),
             },
         }

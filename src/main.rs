@@ -42,7 +42,7 @@ fn main() {
 fn shrun(cmd: String) {
     match shrun_internal(cmd) {
         Ok(_) => (),
-        Err(err) => eprintln!("{}", err),
+        Err(err) => eprintln!("xv6sh: error: {}", err),
     }
 }
 

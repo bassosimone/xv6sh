@@ -85,7 +85,7 @@ impl Lexer {
     }
 
     /// processes the current char of the input stream and, if needed,
-    /// also processes subsequent chars. Returns true whether we've
+    /// also processes subsequent chars. Returns true if we've
     /// reached the end of the input, false otherwise.
     fn process_current(self: &mut Self, c: char) -> bool {
         let mut at_eol = false;

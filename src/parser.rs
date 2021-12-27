@@ -1,4 +1,7 @@
 //! Parser implementation.
+//!
+//! The grammar has been simplified from the one published at
+//! https://pubs.opengroup.org/onlinepubs/009604599/utilities/xcu_chap02.html#tag_02_10.
 
 use crate::lexer;
 use crate::model::{Error, Result};

@@ -42,7 +42,7 @@ impl Serializer {
     fn pipeline(self: &mut Self, pipeline: parser::Pipeline) -> Result<()> {
         let mut commands = pipeline.commands;
         if commands.len() <= 0 {
-            return Err(Error::new("sh: empty pipeline"));
+            return Err(Error::new("empty pipeline"));
         }
         loop {
             match commands.pop_front() {
@@ -91,6 +91,14 @@ impl Serializer {
         self.out.push(')');
         self.redirs(ss.redirs)
     }
+
+    // TODO(bassosimone): the serializer should probably fail to
+    // serialize if we have multiple i/o redirections. Because of
+    // how the shell works, we cannot handle more than a single
+    // output and a single output redirection.
+    //
+    // If we don't do that, the error indicating we have multiple
+    // redirections is instead emitted by a subshell.
 
     /// visit redirs
     fn redirs(self: &mut Self, redirs: parser::RedirectList) -> Result<()> {

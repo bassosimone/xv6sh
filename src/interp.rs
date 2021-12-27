@@ -1,4 +1,5 @@
-//! Interprets the executable syntax tree.
+//! Interprets the executable syntax tree generated
+//! by the translator module (translator.rs).
 
 use crate::model::{Error, Result};
 use crate::parser::{InputRedir, OutputRedir};
@@ -37,9 +38,13 @@ fn compound_serial_command(csc: CompoundSerialCommand) -> Result<()> {
 /// Executes a SingleCommand
 fn single_command(mut sc: SingleCommand) -> Result<()> {
     if sc.arguments.len() < 1 {
+        // we arrive here when we hit [Enter] at the prompt
+        //eprintln!("bonsoir, Elliot!");
         return Ok(());
     }
     let argv0 = sc.arguments.pop_front().unwrap(); // cannot fail
+    // Implementation note: we only check for builtin commands
+    // when we're not in pipeline context - is this correct?
     match argv0.as_str() {
         "cd" => {
             return builtin_cd(sc.arguments);
@@ -55,6 +60,8 @@ fn single_command(mut sc: SingleCommand) -> Result<()> {
 
 /// Implements the builtin `cd` command
 fn builtin_cd(args: VecDeque<String>) -> Result<()> {
+    // TODO(bassosimone): `cd` without arguments should bring
+    // the user to the home directory...
     if args.len() != 1 {
         return Err(Error::new("usage: cd <directory>"));
     }
@@ -64,7 +71,7 @@ fn builtin_cd(args: VecDeque<String>) -> Result<()> {
     }
 }
 
-/// Executes a true pipeline
+/// Executes a pipeline of commands with at least a source and a sink
 fn pipelined_commands(pc: PipelinedCommands) -> Result<()> {
     let mut children = VecDeque::<Child>::new();
     let mut rxall = VecDeque::<PipeReader>::new();
@@ -107,7 +114,7 @@ fn kill_children(mut children: VecDeque<Child>) {
 
 /// Waits for pipeline children to terminate
 fn wait_for_children(mut children: VecDeque<Child>) {
-    while children.len() > 0 {
+    while children.len() > 0 { // note: proceed backwards
         let mut c = children.pop_back().unwrap(); // cannot fail
         let _ = c.wait(); // ignore return value
     }
@@ -120,7 +127,7 @@ fn source_command(mut sc: SourceCommand) -> Result<(Child, PipeReader)> {
     }
     let argv0 = sc.arguments.pop_front().unwrap(); // cannot fail
     let rin = maybe_redirect_input(&sc.input)?;
-    let (crx, cwx) = sys_pipe()?;
+    let (crx, cwx) = wrap_os_pipe()?;
     match common_executor(argv0, sc.arguments, rin, Some(cwx)) {
         Err(err) => Err(err),
         Ok(child) => Ok((child, crx)),
@@ -133,7 +140,7 @@ fn filter_command(mut fc: FilterCommand, rx: PipeReader) -> Result<(Child, PipeR
         return Err(Error::new("pipeline with empty filter command"));
     }
     let argv0 = fc.arguments.pop_front().unwrap(); // cannot fail
-    let (crx, cwx) = sys_pipe()?;
+    let (crx, cwx) = wrap_os_pipe()?;
     match common_executor(argv0, fc.arguments, Some(rx), Some(cwx)) {
         Err(err) => Err(err),
         Ok(child) => Ok((child, crx)),
@@ -227,7 +234,7 @@ fn maybe_debug(argv0: &str, args: &VecDeque<String>) {
 }
 
 /// Wrapper to adapt os_pipe::pipe to our kind of Result
-fn sys_pipe() -> Result<(PipeReader, PipeWriter)> {
+fn wrap_os_pipe() -> Result<(PipeReader, PipeWriter)> {
     match pipe() {
         Err(err) => Err(Error::new(&err.to_string())),
         Ok((rx, wx)) => Ok((rx, wx)),
