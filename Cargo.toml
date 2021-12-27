@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 getopts = "0.2"
+os_pipe = "1"
