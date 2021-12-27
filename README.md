@@ -8,7 +8,15 @@ case that this code behaves differently from the original v6 shell.
 
 ## Building and running
 
-You need `rustc` and `cargo` (possibly via `rustup`). To run:
+You need `rustc` and `cargo` (possibly via `rustup`).
+
+To build:
+
+```
+cargo build
+```
+
+To run:
 
 ```bash
 cargo run
@@ -33,6 +41,8 @@ to execute shell commands in the `run` stage.
 When we encounter commands between `(` and `)` we execute them in
 a subshell. We pass code to the subshell by serializing the specific
 portion of the parse tree using [src/serializer.rs](src/serializer.rs).
+
+## Command Line Flags
 
 The `-x` command line argument turns verbose mode on.
 
