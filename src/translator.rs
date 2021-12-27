@@ -203,7 +203,10 @@ impl Translator {
     }
 
     /// produces pipelined commands
-    fn pipelined_commands(self: &Self, mut input: VecDeque<SimpleCommand>) -> Result<CompoundSerialCommand> {
+    fn pipelined_commands(
+        self: &Self,
+        mut input: VecDeque<SimpleCommand>,
+    ) -> Result<CompoundSerialCommand> {
         let mut output = PipelinedCommands::new();
         output.source = self.new_source(&mut input)?;
         output.filters = self.new_filters(&mut input)?;
@@ -233,7 +236,10 @@ impl Translator {
     }
 
     /// Helper for pipelined_commands
-    fn new_filters(self: &Self, input: &mut VecDeque<SimpleCommand>) -> Result<VecDeque<FilterCommand>> {
+    fn new_filters(
+        self: &Self,
+        input: &mut VecDeque<SimpleCommand>,
+    ) -> Result<VecDeque<FilterCommand>> {
         let mut output = VecDeque::<FilterCommand>::new();
         while input.len() > 1 {
             let e = input.pop_front().unwrap(); // cannot fail
