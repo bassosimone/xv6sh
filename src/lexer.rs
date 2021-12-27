@@ -115,6 +115,13 @@ impl Lexer {
                 self.leave_and_push_back(Kind::Major);
                 at_eol = true;
             }
+        } else if c == '\\' {
+            if let Some(c) = self.read() {
+                self.enter_or_persist(c);
+            } else {
+                self.leave();
+                at_eol = true;
+            }
         } else {
             self.enter_or_persist(c);
         }

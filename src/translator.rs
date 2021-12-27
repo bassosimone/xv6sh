@@ -242,7 +242,8 @@ impl Translator {
         input: &mut VecDeque<SimpleCommand>,
     ) -> Result<VecDeque<FilterCommand>> {
         let mut output = VecDeque::<FilterCommand>::new();
-        while input.len() > 1 { // note: the last element is the sink
+        while input.len() > 1 {
+            // note: the last element is the sink
             let e = input.pop_front().unwrap(); // cannot fail
             let mut filter = FilterCommand::new();
             filter.arguments = e.arguments;

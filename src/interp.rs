@@ -37,14 +37,14 @@ fn compound_serial_command(csc: CompoundSerialCommand) -> Result<()> {
 
 /// Executes a SingleCommand
 fn single_command(mut sc: SingleCommand) -> Result<()> {
+    // Implementation note: we only check for builtin commands
+    // when we're not in pipeline context - is this correct?
     if sc.arguments.len() < 1 {
         // we arrive here when we hit [Enter] at the prompt
         //eprintln!("bonsoir, Elliot!");
         return Ok(());
     }
     let argv0 = sc.arguments.pop_front().unwrap(); // cannot fail
-    // Implementation note: we only check for builtin commands
-    // when we're not in pipeline context - is this correct?
     match argv0.as_str() {
         "cd" => {
             return builtin_cd(sc.arguments);
@@ -114,7 +114,8 @@ fn kill_children(mut children: VecDeque<Child>) {
 
 /// Waits for pipeline children to terminate
 fn wait_for_children(mut children: VecDeque<Child>) {
-    while children.len() > 0 { // note: proceed backwards
+    while children.len() > 0 {
+        // note: proceed backwards
         let mut c = children.pop_back().unwrap(); // cannot fail
         let _ = c.wait(); // ignore return value
     }
