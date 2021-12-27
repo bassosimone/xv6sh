@@ -1,14 +1,16 @@
 //! Interprets the executable syntax tree.
 
 use crate::model::{Error, Result};
+use crate::parser::{InputRedir, OutputRedir};
 use crate::translator::{
     CompoundSerialCommand, FilterCommand, ListOfCommands, PipelinedCommands, SingleCommand,
     SinkCommand, SourceCommand,
 };
 use os_pipe::{pipe, PipeReader, PipeWriter};
 use std::collections::VecDeque;
+use std::convert::Into;
 use std::fs::{File, OpenOptions};
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 
 /// Interprets the given ListOfCommands
 pub fn interpret(mut loc: ListOfCommands) -> Result<()> {
@@ -23,6 +25,7 @@ pub fn interpret(mut loc: ListOfCommands) -> Result<()> {
     }
 }
 
+/// Executes a CompoundSerialCommand
 fn compound_serial_command(csc: CompoundSerialCommand) -> Result<()> {
     match csc {
         CompoundSerialCommand::SingleCommand(sc) => single_command(sc),
@@ -30,6 +33,7 @@ fn compound_serial_command(csc: CompoundSerialCommand) -> Result<()> {
     }
 }
 
+/// Executes a SingleCommand
 fn single_command(mut sc: SingleCommand) -> Result<()> {
     if sc.arguments.len() < 1 {
         return Ok(());
@@ -41,43 +45,14 @@ fn single_command(mut sc: SingleCommand) -> Result<()> {
         }
         _ => (),
     }
-    let mut cmd = Command::new(argv0);
-    while sc.arguments.len() > 0 {
-        let arg = sc.arguments.pop_front().unwrap(); // cannot fail
-        cmd.arg(arg);
-    }
-    match sc.input {
-        None => (),
-        Some(input) => match File::open(input.filename) {
-            Err(err) => return Err(Error::new(&err.to_string())),
-            Ok(filep) => {
-                cmd.stdin(filep);
-            }
-        },
-    }
-    match sc.output {
-        None => (),
-        Some(output) => match OpenOptions::new()
-            .write(true)
-            .create(true)
-            .append(!output.overwrite)
-            .open(output.filename)
-        {
-            Err(err) => return Err(Error::new(&err.to_string())),
-            Ok(filep) => {
-                cmd.stdout(filep);
-            }
-        },
-    }
-    match cmd.spawn() {
-        Err(err) => return Err(Error::new(&err.to_string())),
-        Ok(mut child) => {
-            let _ = child.wait(); // we don't care about the return value
-            Ok(())
-        }
-    }
+    let rin = maybe_redirect_input(&sc.input)?;
+    let rout = maybe_redirect_output(&sc.output)?;
+    let mut chld = common_executor(argv0, sc.arguments, rin, rout)?;
+    let _ = chld.wait(); // we don't care about the return value
+    Ok(())
 }
 
+/// Implements the builtin `cd` command
 fn builtin_cd(args: VecDeque<String>) -> Result<()> {
     if args.len() != 1 {
         return Err(Error::new("usage: cd <directory>"));
@@ -88,6 +63,7 @@ fn builtin_cd(args: VecDeque<String>) -> Result<()> {
     }
 }
 
+/// Executes a true pipeline
 fn pipelined_commands(pc: PipelinedCommands) -> Result<()> {
     let mut children = VecDeque::<Child>::new();
     let mut rxall = VecDeque::<PipeReader>::new();
@@ -120,6 +96,7 @@ fn pipelined_commands(pc: PipelinedCommands) -> Result<()> {
     Ok(())
 }
 
+/// Kills all the children inside a pipeline
 fn kill_children(mut children: VecDeque<Child>) {
     for c in children.iter_mut() {
         let _ = c.kill(); // ignore return value
@@ -127,6 +104,7 @@ fn kill_children(mut children: VecDeque<Child>) {
     wait_for_children(children);
 }
 
+/// Waits for pipeline children to terminate
 fn wait_for_children(mut children: VecDeque<Child>) {
     while children.len() > 0 {
         let mut c = children.pop_back().unwrap(); // cannot fail
@@ -134,76 +112,87 @@ fn wait_for_children(mut children: VecDeque<Child>) {
     }
 }
 
+/// Executes the source command of the pipeline
 fn source_command(mut sc: SourceCommand) -> Result<(Child, PipeReader)> {
     if sc.arguments.len() < 1 {
         return Err(Error::new("pipeline with empty source command"));
     }
     let argv0 = sc.arguments.pop_front().unwrap(); // cannot fail
-    let mut cmd = Command::new(argv0);
-    while sc.arguments.len() > 0 {
-        let arg = sc.arguments.pop_front().unwrap(); // cannot fail
-        cmd.arg(arg);
-    }
-    match sc.input {
-        None => (),
-        Some(input) => match File::open(input.filename) {
-            Err(err) => return Err(Error::new(&err.to_string())),
-            Ok(filep) => {
-                cmd.stdin(filep);
-            }
-        },
-    }
-    let (rx, wx) = sys_pipe()?;
-    cmd.stdout(wx);
-    match cmd.spawn() {
-        Err(err) => return Err(Error::new(&err.to_string())),
-        Ok(child) => Ok((child, rx)),
+    let rin = maybe_redirect_input(&sc.input)?;
+    let (crx, cwx) = sys_pipe()?;
+    match common_executor(argv0, sc.arguments, rin, Some(cwx)) {
+        Err(err) => Err(err),
+        Ok(child) => Ok((child, crx)),
     }
 }
 
+/// Executes a filter command of a pipeline
 fn filter_command(mut fc: FilterCommand, rx: PipeReader) -> Result<(Child, PipeReader)> {
     if fc.arguments.len() < 1 {
         return Err(Error::new("pipeline with empty filter command"));
     }
     let argv0 = fc.arguments.pop_front().unwrap(); // cannot fail
-    let mut cmd = Command::new(argv0);
-    while fc.arguments.len() > 0 {
-        let arg = fc.arguments.pop_front().unwrap(); // cannot fail
-        cmd.arg(arg);
-    }
-    cmd.stdin(rx);
-    let (rx, wx) = sys_pipe()?;
-    cmd.stdout(wx);
-    match cmd.spawn() {
-        Err(err) => return Err(Error::new(&err.to_string())),
-        Ok(child) => Ok((child, rx)),
+    let (crx, cwx) = sys_pipe()?;
+    match common_executor(argv0, fc.arguments, Some(rx), Some(cwx)) {
+        Err(err) => Err(err),
+        Ok(child) => Ok((child, crx)),
     }
 }
 
+/// Executes the sink command of a pipeline
 fn sink_command(mut sc: SinkCommand, rx: PipeReader) -> Result<Child> {
     if sc.arguments.len() < 1 {
         return Err(Error::new("pipeline with empty sink command"));
     }
     let argv0 = sc.arguments.pop_front().unwrap(); // cannot fail
-    let mut cmd = Command::new(argv0);
-    while sc.arguments.len() > 0 {
-        let arg = sc.arguments.pop_front().unwrap(); // cannot fail
-        cmd.arg(arg);
+    let rou = maybe_redirect_output(&sc.output)?;
+    common_executor(argv0, sc.arguments, Some(rx), rou)
+}
+
+/// Creates the input redirection if needed.
+fn maybe_redirect_input(input: &Option<InputRedir>) -> Result<Option<File>> {
+    match input {
+        None => Ok(None),
+        Some(input) => match File::open(&input.filename) {
+            Err(err) => Err(Error::new(&err.to_string())),
+            Ok(filep) => Ok(Some(filep)),
+        },
     }
-    cmd.stdin(rx);
-    match sc.output {
-        None => (),
+}
+
+/// Creates the output redirection if needed.
+fn maybe_redirect_output(output: &Option<OutputRedir>) -> Result<Option<File>> {
+    match output {
+        None => Ok(None),
         Some(output) => match OpenOptions::new()
             .write(true)
             .create(true)
             .append(!output.overwrite)
-            .open(output.filename)
+            .open(&output.filename)
         {
             Err(err) => return Err(Error::new(&err.to_string())),
-            Ok(filep) => {
-                cmd.stdout(filep);
-            }
+            Ok(filep) => Ok(Some(filep)),
         },
+    }
+}
+
+/// Common code for executing a child process.
+fn common_executor<T1: Into<Stdio>, T2: Into<Stdio>>(
+    argv0: String,
+    mut args: VecDeque<String>,
+    stdin: Option<T1>,
+    stdout: Option<T2>,
+) -> Result<Child> {
+    let mut cmd = Command::new(argv0);
+    while args.len() > 0 {
+        let arg = args.pop_front().unwrap(); // cannot fail
+        cmd.arg(arg);
+    }
+    if let Some(filep) = stdin {
+        cmd.stdin(filep);
+    }
+    if let Some(filep) = stdout {
+        cmd.stdout(filep);
     }
     match cmd.spawn() {
         Err(err) => return Err(Error::new(&err.to_string())),
@@ -211,6 +200,7 @@ fn sink_command(mut sc: SinkCommand, rx: PipeReader) -> Result<Child> {
     }
 }
 
+/// Wrapper to adapt os_pipe::pipe to our kind of Result
 fn sys_pipe() -> Result<(PipeReader, PipeWriter)> {
     match pipe() {
         Err(err) => Err(Error::new(&err.to_string())),
