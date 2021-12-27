@@ -1,4 +1,4 @@
-# Rust re-implementation of Unix v6 shell
+# Unix-v6-like shell written in Rust
 
 This repository contains a Unix-v6-like shell implemented in Rust.
 
