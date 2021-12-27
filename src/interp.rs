@@ -11,6 +11,7 @@ use std::collections::VecDeque;
 use std::convert::Into;
 use std::fs::{File, OpenOptions};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Interprets the given ListOfCommands
 pub fn interpret(mut loc: ListOfCommands) -> Result<()> {
@@ -183,6 +184,7 @@ fn common_executor<T1: Into<Stdio>, T2: Into<Stdio>>(
     stdin: Option<T1>,
     stdout: Option<T2>,
 ) -> Result<Child> {
+    maybe_debug(&argv0, &args);
     let mut cmd = Command::new(argv0);
     while args.len() > 0 {
         let arg = args.pop_front().unwrap(); // cannot fail
@@ -197,6 +199,30 @@ fn common_executor<T1: Into<Stdio>, T2: Into<Stdio>>(
     match cmd.spawn() {
         Err(err) => return Err(Error::new(&err.to_string())),
         Ok(child) => Ok(child),
+    }
+}
+
+static VERBOSE: AtomicUsize = AtomicUsize::new(0);
+
+/// Returns whether the interpreter is verbose.
+pub fn is_verbose() -> bool {
+    return VERBOSE.load(Ordering::Acquire) > 0;
+}
+
+/// Configures the interpreter to be verbose.
+pub fn set_verbose() {
+    VERBOSE.store(1, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Possibly log to stderr the commands we're about to execute.
+fn maybe_debug(argv0: &str, args: &VecDeque<String>) {
+    if is_verbose() {
+        let mut farg = String::new();
+        for arg in args.iter() {
+            farg.push_str(arg);
+            farg.push(' ');
+        }
+        eprintln!("+ {} {}", argv0, farg);
     }
 }
 

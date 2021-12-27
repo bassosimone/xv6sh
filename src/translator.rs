@@ -1,5 +1,6 @@
 //! Translates the syntax tree to an executable syntax tree.
 
+use crate::interp;
 use crate::model::{Error, Result};
 use crate::parser::{
     Command, CompleteCommand, InputRedir, OutputRedir, Pipeline, RedirectList, SimpleCommand,
@@ -293,6 +294,9 @@ impl Translator {
         };
         let exe = Self::get_current_exe()?;
         scmd.arguments.push_back(exe);
+        if interp::is_verbose() {
+            scmd.arguments.push_back(String::from("-x"))
+        }
         scmd.arguments.push_back(String::from("-c"));
         let serialized = serializer::serialize(input.complete_command)?;
         scmd.arguments.push_back(serialized);

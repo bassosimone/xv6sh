@@ -12,6 +12,7 @@ fn main() {
     let program = args[0].clone();
     let mut opts = getopts::Options::new();
     opts.optopt("c", "", "execute the given command line", "COMMANDS");
+    opts.optflag("x", "", "turn debugging on");
     let matches = match opts.parse(&args[1..]) {
         Err(_) => {
             eprintln!("usage: {} [-c COMMANDS]", program);
@@ -19,6 +20,9 @@ fn main() {
         }
         Ok(m) => m,
     };
+    if matches.opt_present("x") {
+        interp::set_verbose();
+    }
     if let Some(cmd) = matches.opt_str("c") {
         shrun(cmd);
         std::process::exit(0);
@@ -42,11 +46,11 @@ fn shrun(cmd: String) {
 /// Interprets a single shell input line.
 fn shrun_internal(cmd: String) -> Result<()> {
     let tokens = lexer::scan(cmd);
-    println!("sh: tokens: {:?}", tokens);
+    //eprintln!("sh: tokens: {:?}", tokens);
     let tree = parser::parse(tokens)?;
-    println!("sh: pass #1 tree: {:?}", tree);
+    //eprintln!("sh: pass #1 tree: {:?}", tree);
     let loc = translator::translate(tree)?;
-    println!("sh: pass #2 tree: {:?}", loc);
+    //eprintln!("sh: pass #2 tree: {:?}", loc);
     interp::interpret(loc)
 }
 
