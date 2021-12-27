@@ -3,6 +3,9 @@ mod lexer;
 mod model;
 mod parser;
 mod serializer;
+mod vm;
+
+use crate::model::{Error, Result};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -30,21 +33,25 @@ fn main() {
 
 /// Interprets a single shell input line.
 fn shrun(cmd: String) {
-    let tokens = lexer::scan(cmd);
-    println!("sh: tokens: {:?}", tokens);
-    let cc = parser::parse(tokens);
-    match cc {
-        Err(_) => (),
-        Ok(cc) => {
-            println!("sh: parse tree: {:?}", cc);
-            let bytecode = compiler::compile(cc);
-            println!("sh: bytecode {:?}", bytecode);
-        }
+    match shrun_internal(cmd) {
+        Ok(_) => (),
+        Err(err) => eprintln!("{}", err),
     }
 }
 
+/// Interprets a single shell input line.
+fn shrun_internal(cmd: String) -> Result<()> {
+    let tokens = lexer::scan(cmd);
+    println!("sh: tokens: {:?}", tokens);
+    let cc = parser::parse(tokens)?;
+    println!("sh: parse tree: {:?}", cc);
+    let bytecode = compiler::compile(cc)?;
+    println!("sh: bytecode {:?}", bytecode);
+    vm::run(bytecode)
+}
+
 /// Reads a command from the standard input.
-fn getcmd() -> Result<String, std::io::Error> {
+fn getcmd() -> Result<String> {
     use std::io::BufRead;
     use std::io::Write;
     print!("$ ");
@@ -52,10 +59,10 @@ fn getcmd() -> Result<String, std::io::Error> {
     let stdin = std::io::stdin();
     let lines = stdin.lock().lines().next();
     match lines {
-        Some(line) => line,
-        None => Err(std::io::Error::new(
-            std::io::ErrorKind::UnexpectedEof,
-            "EOF",
-        )),
+        Some(line) => match line {
+            Err(err) => Err(Error::new(&err.to_string())),
+            Ok(line) => Ok(line),
+        },
+        None => Err(Error::new("EOF")),
     }
 }

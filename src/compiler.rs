@@ -14,7 +14,7 @@ pub struct OpCommand {
 }
 
 /// Policy for the standard input.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum StdinPolicy {
     Inherit,
     Pipe,
@@ -22,7 +22,7 @@ pub enum StdinPolicy {
 }
 
 /// Policy for the standard output.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum StdoutPolicy {
     Inherit,
     Pipe,
