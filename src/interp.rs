@@ -29,20 +29,28 @@ pub fn set_verbose() {
 
 /// Interprets the given ListOfCommands
 pub fn interpret(loc: ListOfCommands) -> Result<()> {
-    Interpreter::run(loc)
+    let interp = Interpreter::new(is_verbose());
+    interp.run(loc)
 }
 
 /// Interprets the given ListOfCommands
-pub struct Interpreter {}
+pub struct Interpreter {
+    verbose: bool,
+}
 
 impl Interpreter {
+    /// Creates a new interpreter.
+    pub fn new(verbose: bool) -> Interpreter {
+        Interpreter { verbose: verbose }
+    }
+
     /// Runs the interpreter
-    pub fn run(mut loc: ListOfCommands) -> Result<()> {
+    pub fn run(self: &Self, mut loc: ListOfCommands) -> Result<()> {
         loop {
             match loc.pipelines.pop_front() {
                 None => return Ok(()),
                 Some(p) => {
-                    Self::compound_serial_command(p)?;
+                    self.compound_serial_command(p)?;
                     continue;
                 }
             }
@@ -50,15 +58,15 @@ impl Interpreter {
     }
 
     /// Executes a CompoundSerialCommand
-    fn compound_serial_command(csc: CompoundSerialCommand) -> Result<()> {
+    fn compound_serial_command(self: &Self, csc: CompoundSerialCommand) -> Result<()> {
         match csc {
-            CompoundSerialCommand::SingleCommand(sc) => Self::single_command(sc),
-            CompoundSerialCommand::PipelinedCommands(pc) => Self::pipelined_commands(pc),
+            CompoundSerialCommand::SingleCommand(sc) => self.single_command(sc),
+            CompoundSerialCommand::PipelinedCommands(pc) => self.pipelined_commands(pc),
         }
     }
 
     /// Executes a SingleCommand
-    fn single_command(mut sc: SingleCommand) -> Result<()> {
+    fn single_command(self: &Self, mut sc: SingleCommand) -> Result<()> {
         // Implementation note: we only check for builtin commands
         // when we're not in pipeline context - is this correct?
         if sc.arguments.len() < 1 {
@@ -75,7 +83,7 @@ impl Interpreter {
         }
         let rin = Self::maybe_redirect_input(&sc.input)?;
         let rout = Self::maybe_redirect_output(&sc.output)?;
-        let mut chld = Self::common_executor(argv0, sc.arguments, rin, rout)?;
+        let mut chld = self.common_executor(argv0, sc.arguments, rin, rout)?;
         if sc.sync {
             let _ = chld.wait(); // we don't care about the return value
         } else {
@@ -98,15 +106,15 @@ impl Interpreter {
     }
 
     /// Executes a pipeline of commands with at least a source and a sink
-    fn pipelined_commands(pc: PipelinedCommands) -> Result<()> {
+    fn pipelined_commands(self: &Self, pc: PipelinedCommands) -> Result<()> {
         let mut children = VecDeque::<Child>::new();
         let mut rxall = VecDeque::<PipeReader>::new();
         let source = pc.source;
-        let (child, rx) = Self::source_command(source)?;
+        let (child, rx) = self.source_command(source)?;
         children.push_back(child);
         rxall.push_back(rx);
         for filter in pc.filters {
-            match Self::filter_command(filter, rxall.pop_back().unwrap()) {
+            match self.filter_command(filter, rxall.pop_back().unwrap()) {
                 Err(err) => {
                     Self::kill_children(children);
                     return Err(Error::new(&err.to_string()));
@@ -117,7 +125,7 @@ impl Interpreter {
                 }
             }
         }
-        match Self::sink_command(pc.sink, rxall.pop_back().unwrap()) {
+        match self.sink_command(pc.sink, rxall.pop_back().unwrap()) {
             Err(err) => {
                 Self::kill_children(children);
                 return Err(Error::new(&err.to_string()));
@@ -152,40 +160,40 @@ impl Interpreter {
     }
 
     /// Executes the source command of the pipeline
-    fn source_command(mut sc: SourceCommand) -> Result<(Child, PipeReader)> {
+    fn source_command(self: &Self, mut sc: SourceCommand) -> Result<(Child, PipeReader)> {
         if sc.arguments.len() < 1 {
             return Err(Error::new("pipeline with empty source command"));
         }
         let argv0 = sc.arguments.pop_front().unwrap(); // cannot fail
         let rin = Self::maybe_redirect_input(&sc.input)?;
         let (crx, cwx) = Self::wrap_os_pipe()?;
-        match Self::common_executor(argv0, sc.arguments, rin, Some(cwx)) {
+        match self.common_executor(argv0, sc.arguments, rin, Some(cwx)) {
             Err(err) => Err(err),
             Ok(child) => Ok((child, crx)),
         }
     }
 
     /// Executes a filter command of a pipeline
-    fn filter_command(mut fc: FilterCommand, rx: PipeReader) -> Result<(Child, PipeReader)> {
+    fn filter_command(self: &Self, mut fc: FilterCommand, rx: PipeReader) -> Result<(Child, PipeReader)> {
         if fc.arguments.len() < 1 {
             return Err(Error::new("pipeline with empty filter command"));
         }
         let argv0 = fc.arguments.pop_front().unwrap(); // cannot fail
         let (crx, cwx) = Self::wrap_os_pipe()?;
-        match Self::common_executor(argv0, fc.arguments, Some(rx), Some(cwx)) {
+        match self.common_executor(argv0, fc.arguments, Some(rx), Some(cwx)) {
             Err(err) => Err(err),
             Ok(child) => Ok((child, crx)),
         }
     }
 
     /// Executes the sink command of a pipeline
-    fn sink_command(mut sc: SinkCommand, rx: PipeReader) -> Result<Child> {
+    fn sink_command(self: &Self, mut sc: SinkCommand, rx: PipeReader) -> Result<Child> {
         if sc.arguments.len() < 1 {
             return Err(Error::new("pipeline with empty sink command"));
         }
         let argv0 = sc.arguments.pop_front().unwrap(); // cannot fail
         let rou = Self::maybe_redirect_output(&sc.output)?;
-        Self::common_executor(argv0, sc.arguments, Some(rx), rou)
+        self.common_executor(argv0, sc.arguments, Some(rx), rou)
     }
 
     /// Creates the input redirection if needed.
@@ -217,18 +225,19 @@ impl Interpreter {
 
     /// Common code for executing a child process.
     fn common_executor<T1: Into<Stdio>, T2: Into<Stdio>>(
+        self: &Self,
         argv0: String,
         args: VecDeque<String>,
         stdin: Option<T1>,
         stdout: Option<T2>,
     ) -> Result<Child> {
-        Self::maybe_debug(&argv0, &args);
+        self.maybe_debug(&argv0, &args);
         process::spawn(argv0, args, stdin, stdout)
     }
 
     /// Possibly log to stderr the commands we're about to execute.
-    fn maybe_debug(argv0: &str, args: &VecDeque<String>) {
-        if is_verbose() {
+    fn maybe_debug(self: &Self, argv0: &str, args: &VecDeque<String>) {
+        if self.verbose {
             let mut farg = String::new();
             for arg in args.iter() {
                 farg.push_str(arg);
