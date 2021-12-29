@@ -1,6 +1,6 @@
 //! Processes management code.
 
-use crate::model::{Error, ProcessExecutor, ProcessManager, Result};
+use crate::model::{Error, Result};
 use std::collections::VecDeque;
 use std::process::{Child, Command};
 
@@ -39,13 +39,6 @@ impl Manager {
     }
 }
 
-impl<'a> ProcessManager<'a> for Manager {
-    /// Creates a new Executor for this manager.
-    fn new_executor(self: &'a mut Self) -> Box<dyn ProcessExecutor + 'a> {
-        Box::new(Executor::new(self))
-    }
-}
-
 /// Executes one or more processes.
 pub struct Executor<'a> {
     children: VecDeque<Child>,
@@ -54,16 +47,16 @@ pub struct Executor<'a> {
 
 impl<'a> Executor<'a> {
     /// Creates a new Executor.
-    fn new(manager: &'a mut Manager) -> Executor<'a> {
+    pub fn new(manager: &'a mut Manager) -> Executor<'a> {
         Executor {
             children: VecDeque::<_>::new(),
             manager: manager,
         }
     }
-}
 
-impl<'a> ProcessExecutor for Executor<'a> {
-    fn spawn(self: &mut Self, mut cmd: Command) -> Result<()> {
+    /// Spawns a new foreground process. When the executor is dropped, any
+    /// process that is still running is inherited by the Manager.
+    pub fn spawn(self: &mut Self, mut cmd: Command) -> Result<()> {
         match cmd.spawn() {
             Err(err) => return Err(Error::new(&err.to_string())),
             Ok(child) => {
@@ -73,14 +66,16 @@ impl<'a> ProcessExecutor for Executor<'a> {
         }
     }
 
-    fn kill_children(self: &mut Self) {
-        for c in self.children.iter_mut() {
-            let _ = c.kill(); // ignore return value
+    /// Kills and waits for all foreground children.
+    pub fn kill_children(self: &mut Self) {
+        for chld in self.children.iter_mut() {
+            let _ = chld.kill(); // ignore return value
         }
         self.wait_for_children();
     }
 
-    fn wait_for_children(self: &mut Self) {
+    /// Waits for foreground children.
+    pub fn wait_for_children(self: &mut Self) {
         while self.children.len() > 0 {
             // note: proceed backwards
             let mut c = self.children.pop_back().unwrap(); // cannot fail

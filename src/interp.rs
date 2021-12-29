@@ -1,9 +1,9 @@
 //! Interprets the executable syntax tree generated
 //! by the translator module (translator.rs).
 
-use crate::model::{Error, ProcessExecutor, ProcessManager, Result};
+use crate::model::{Error, Result};
 use crate::parser::{InputRedir, OutputRedir};
-use crate::process::{Manager};
+use crate::process::{Executor, Manager};
 use crate::translator::{
     CompoundSerialCommand, FilterCommand, ListOfCommands, PipelinedCommands, SingleCommand,
     SinkCommand, SourceCommand,
@@ -68,7 +68,7 @@ impl<'a> Interpreter {
         }
         let rin = Self::maybe_redirect_input(&sc.input)?;
         let rout = Self::maybe_redirect_output(&sc.output)?;
-        let mut executor = manager.new_executor();
+        let mut executor = Executor::new(manager);
         self.exec(&mut executor, argv0, sc.arguments, rin, rout)?;
         if sc.sync {
             executor.wait_for_children();
@@ -92,7 +92,7 @@ impl<'a> Interpreter {
     /// Executes a pipeline of commands with at least a source and a sink
     fn pipelined_commands(self: &Self, pc: PipelinedCommands, manager: &mut Manager) -> Result<()> {
         let mut rxall = VecDeque::<PipeReader>::new();
-        let mut executor = manager.new_executor();
+        let mut executor = Executor::new(manager);
         let source = pc.source;
         let rx = self.source_command(&mut executor, source)?;
         rxall.push_back(rx);
@@ -121,7 +121,7 @@ impl<'a> Interpreter {
     /// Executes the source command of the pipeline
     fn source_command(
         self: &Self,
-        executor: &mut Box<dyn ProcessExecutor + 'a>,
+        executor: &mut Executor,
         mut sc: SourceCommand,
     ) -> Result<PipeReader> {
         if sc.arguments.len() < 1 {
@@ -139,7 +139,7 @@ impl<'a> Interpreter {
     /// Executes a filter command of a pipeline
     fn filter_command(
         self: &Self,
-        executor: &mut Box<dyn ProcessExecutor + 'a>,
+        executor: &mut Executor,
         mut fc: FilterCommand,
         rx: PipeReader,
     ) -> Result<PipeReader> {
@@ -157,7 +157,7 @@ impl<'a> Interpreter {
     /// Executes the sink command of a pipeline
     fn sink_command(
         self: &Self,
-        executor: &mut Box<dyn ProcessExecutor + 'a>,
+        executor: &mut Executor,
         mut sc: SinkCommand,
         rx: PipeReader,
     ) -> Result<()> {
@@ -199,7 +199,7 @@ impl<'a> Interpreter {
     /// Common code for executing a child process.
     fn exec<T1: Into<Stdio>, T2: Into<Stdio>>(
         self: &Self,
-        executor: &mut Box<dyn ProcessExecutor + 'a>,
+        executor: &mut Executor,
         argv0: String,
         mut args: VecDeque<String>,
         stdin: Option<T1>,
