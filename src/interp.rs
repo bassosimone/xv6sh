@@ -19,7 +19,7 @@ pub struct Interpreter {
     verbose: bool,
 }
 
-impl<'a> Interpreter {
+impl Interpreter {
     /// Creates a new interpreter.
     pub fn new(verbose: bool) -> Interpreter {
         Interpreter { verbose: verbose }
