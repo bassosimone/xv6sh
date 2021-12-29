@@ -10,19 +10,19 @@ pub struct Manager {
 }
 
 impl Manager {
-    /// creates a new process manager.
+    /// Creates a new process manager.
     pub fn new() -> Manager {
         Manager {
             procs: VecDeque::<_>::new(),
         }
     }
 
-    /// adds a process to the pool of processes we manage.
+    /// Adds a process to the pool of background processes we manage.
     fn add(self: &mut Self, proc: Child) {
         self.procs.push_back(proc);
     }
 
-    /// collects terminated processes.
+    /// Checks for and collects terminated background processes.
     pub fn collect(self: &mut Self) {
         let mut running = VecDeque::<_>::new();
         while self.procs.len() > 0 {
@@ -39,9 +39,13 @@ impl Manager {
     }
 }
 
-/// Executes one or more processes.
+/// Executes one or more foreground processes. Transfers the ownership of
+/// still running processes to manager when the executor is dropped.
 pub struct Executor<'a> {
+    /// List of foreground processes.
     children: VecDeque<Child>,
+
+    /// Manager to transfer background processes to.
     manager: &'a mut Manager,
 }
 
@@ -85,7 +89,7 @@ impl<'a> Executor<'a> {
 }
 
 impl<'a> Drop for Executor<'a> {
-    /// ensures we kill the children at a later time.
+    /// Transfer running processes ownership to the manager.
     fn drop(&mut self) {
         while self.children.len() > 0 {
             self.manager.add(self.children.pop_front().unwrap());
