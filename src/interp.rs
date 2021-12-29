@@ -15,6 +15,8 @@ use std::fs::{File, OpenOptions};
 use std::process::{Child, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+static VERBOSE: AtomicUsize = AtomicUsize::new(0);
+
 /// Interprets the given ListOfCommands
 pub fn interpret(mut loc: ListOfCommands) -> Result<()> {
     loop {
@@ -204,8 +206,6 @@ fn common_executor<T1: Into<Stdio>, T2: Into<Stdio>>(
     maybe_debug(&argv0, &args);
     process::spawn(argv0, args, stdin, stdout)
 }
-
-static VERBOSE: AtomicUsize = AtomicUsize::new(0);
 
 /// Returns whether the interpreter is verbose.
 pub fn is_verbose() -> bool {
