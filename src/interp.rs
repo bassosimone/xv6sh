@@ -1,9 +1,9 @@
 //! Interprets the executable syntax tree generated
 //! by the translator module (translator.rs).
 
-use crate::model::{Error, Result};
+use crate::model::{Error, ProcessExecutor, ProcessManager, Result};
 use crate::parser::{InputRedir, OutputRedir};
-use crate::process::{Executor, Manager};
+use crate::process::{Manager};
 use crate::translator::{
     CompoundSerialCommand, FilterCommand, ListOfCommands, PipelinedCommands, SingleCommand,
     SinkCommand, SourceCommand,
@@ -12,14 +12,14 @@ use os_pipe::{pipe, PipeReader, PipeWriter};
 use std::collections::VecDeque;
 use std::convert::Into;
 use std::fs::{File, OpenOptions};
-use std::process::Stdio;
+use std::process::{Command, Stdio};
 
 /// Interprets the given ListOfCommands
 pub struct Interpreter {
     verbose: bool,
 }
 
-impl Interpreter {
+impl<'a> Interpreter {
     /// Creates a new interpreter.
     pub fn new(verbose: bool) -> Interpreter {
         Interpreter { verbose: verbose }
@@ -68,7 +68,7 @@ impl Interpreter {
         }
         let rin = Self::maybe_redirect_input(&sc.input)?;
         let rout = Self::maybe_redirect_output(&sc.output)?;
-        let mut executor = Executor::new(manager);
+        let mut executor = manager.new_executor();
         self.exec(&mut executor, argv0, sc.arguments, rin, rout)?;
         if sc.sync {
             executor.wait_for_children();
@@ -92,7 +92,7 @@ impl Interpreter {
     /// Executes a pipeline of commands with at least a source and a sink
     fn pipelined_commands(self: &Self, pc: PipelinedCommands, manager: &mut Manager) -> Result<()> {
         let mut rxall = VecDeque::<PipeReader>::new();
-        let mut executor = Executor::new(manager);
+        let mut executor = manager.new_executor();
         let source = pc.source;
         let rx = self.source_command(&mut executor, source)?;
         rxall.push_back(rx);
@@ -121,7 +121,7 @@ impl Interpreter {
     /// Executes the source command of the pipeline
     fn source_command(
         self: &Self,
-        executor: &mut Executor,
+        executor: &mut Box<dyn ProcessExecutor + 'a>,
         mut sc: SourceCommand,
     ) -> Result<PipeReader> {
         if sc.arguments.len() < 1 {
@@ -139,7 +139,7 @@ impl Interpreter {
     /// Executes a filter command of a pipeline
     fn filter_command(
         self: &Self,
-        executor: &mut Executor,
+        executor: &mut Box<dyn ProcessExecutor + 'a>,
         mut fc: FilterCommand,
         rx: PipeReader,
     ) -> Result<PipeReader> {
@@ -157,7 +157,7 @@ impl Interpreter {
     /// Executes the sink command of a pipeline
     fn sink_command(
         self: &Self,
-        executor: &mut Executor,
+        executor: &mut Box<dyn ProcessExecutor + 'a>,
         mut sc: SinkCommand,
         rx: PipeReader,
     ) -> Result<()> {
@@ -199,14 +199,25 @@ impl Interpreter {
     /// Common code for executing a child process.
     fn exec<T1: Into<Stdio>, T2: Into<Stdio>>(
         self: &Self,
-        executor: &mut Executor,
+        executor: &mut Box<dyn ProcessExecutor + 'a>,
         argv0: String,
-        args: VecDeque<String>,
+        mut args: VecDeque<String>,
         stdin: Option<T1>,
         stdout: Option<T2>,
     ) -> Result<()> {
         self.maybe_debug(&argv0, &args);
-        executor.spawn(argv0, args, stdin, stdout)
+        let mut cmd = Command::new(argv0);
+        while args.len() > 0 {
+            let arg = args.pop_front().unwrap(); // cannot fail
+            cmd.arg(arg);
+        }
+        if let Some(filep) = stdin {
+            cmd.stdin(filep);
+        }
+        if let Some(filep) = stdout {
+            cmd.stdout(filep);
+        }
+        executor.spawn(cmd)
     }
 
     /// Possibly log to stderr the commands we're about to execute.

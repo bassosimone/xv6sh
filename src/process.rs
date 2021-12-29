@@ -1,8 +1,8 @@
 //! Processes management code.
 
-use crate::model::{Error, Result};
+use crate::model::{Error, ProcessExecutor, ProcessManager, Result};
 use std::collections::VecDeque;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command};
 
 /// A Manager for background processes.
 pub struct Manager {
@@ -39,6 +39,13 @@ impl Manager {
     }
 }
 
+impl<'a> ProcessManager<'a> for Manager {
+    /// Creates a new Executor for this manager.
+    fn new_executor(self: &'a mut Self) -> Box<dyn ProcessExecutor + 'a> {
+        Box::new(Executor::new(self))
+    }
+}
+
 /// Executes one or more processes.
 pub struct Executor<'a> {
     children: VecDeque<Child>,
@@ -47,32 +54,16 @@ pub struct Executor<'a> {
 
 impl<'a> Executor<'a> {
     /// Creates a new Executor.
-    pub fn new(manager: &'a mut Manager) -> Executor<'a> {
+    fn new(manager: &'a mut Manager) -> Executor<'a> {
         Executor {
             children: VecDeque::<_>::new(),
             manager: manager,
         }
     }
+}
 
-    /// Common code for spawning a child process.
-    pub fn spawn<T1: Into<Stdio>, T2: Into<Stdio>>(
-        self: &mut Self,
-        argv0: String,
-        mut args: VecDeque<String>,
-        stdin: Option<T1>,
-        stdout: Option<T2>,
-    ) -> Result<()> {
-        let mut cmd = Command::new(argv0);
-        while args.len() > 0 {
-            let arg = args.pop_front().unwrap(); // cannot fail
-            cmd.arg(arg);
-        }
-        if let Some(filep) = stdin {
-            cmd.stdin(filep);
-        }
-        if let Some(filep) = stdout {
-            cmd.stdout(filep);
-        }
+impl<'a> ProcessExecutor for Executor<'a> {
+    fn spawn(self: &mut Self, mut cmd: Command) -> Result<()> {
         match cmd.spawn() {
             Err(err) => return Err(Error::new(&err.to_string())),
             Ok(child) => {
@@ -82,16 +73,14 @@ impl<'a> Executor<'a> {
         }
     }
 
-    /// Kills all the children inside a pipeline
-    pub fn kill_children(self: &mut Self) {
+    fn kill_children(self: &mut Self) {
         for c in self.children.iter_mut() {
             let _ = c.kill(); // ignore return value
         }
         self.wait_for_children();
     }
 
-    /// Waits for pipeline children to terminate
-    pub fn wait_for_children(self: &mut Self) {
+    fn wait_for_children(self: &mut Self) {
         while self.children.len() > 0 {
             // note: proceed backwards
             let mut c = self.children.pop_back().unwrap(); // cannot fail
