@@ -1,7 +1,6 @@
 //! Translates the syntax tree into an executable syntax tree
 //! that the interpreter will then interpret.
 
-use crate::interp;
 use crate::model::{Error, Result};
 use crate::parser::{
     Command, CompleteCommand, InputRedir, OutputRedir, Pipeline, SimpleCommand, Subshell,
@@ -62,8 +61,8 @@ pub struct SinkCommand {
 }
 
 /// Translates the syntax tree to make it interpretable.
-pub fn translate(cc: CompleteCommand) -> Result<ListOfCommands> {
-    let translator = Translator::new();
+pub fn translate(cc: CompleteCommand, verbose: bool) -> Result<ListOfCommands> {
+    let translator = Translator::new(verbose);
     translator.complete_command(cc)
 }
 
@@ -138,12 +137,14 @@ impl SinkCommand {
 //
 
 /// The translator itself.
-struct Translator {}
+struct Translator {
+    verbose: bool,
+}
 
 impl Translator {
     /// creates a new translator
-    fn new() -> Translator {
-        Translator {}
+    fn new(verbose: bool) -> Translator {
+        Translator { verbose: verbose }
     }
 
     /// visits each pipeline inside the complete command.
@@ -307,7 +308,7 @@ impl Translator {
         };
         let exe = Self::get_current_exe()?;
         scmd.arguments.push_back(exe);
-        if interp::is_verbose() {
+        if self.verbose {
             scmd.arguments.push_back(String::from("-x"))
         }
         scmd.arguments.push_back(String::from("-c"));

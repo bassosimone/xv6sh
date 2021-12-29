@@ -174,7 +174,11 @@ impl Interpreter {
     }
 
     /// Executes a filter command of a pipeline
-    fn filter_command(self: &Self, mut fc: FilterCommand, rx: PipeReader) -> Result<(Child, PipeReader)> {
+    fn filter_command(
+        self: &Self,
+        mut fc: FilterCommand,
+        rx: PipeReader,
+    ) -> Result<(Child, PipeReader)> {
         if fc.arguments.len() < 1 {
             return Err(Error::new("pipeline with empty filter command"));
         }
