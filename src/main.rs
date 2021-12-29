@@ -28,32 +28,33 @@ fn main() {
         }
         Ok(m) => m,
     };
+    let mut verbose = false;
     if matches.opt_present("x") {
-        interp::set_verbose();
+        verbose = true;
     }
     let stage = matches.opt_str("stage").or(Some(String::new())).unwrap();
     if let Some(cmd) = matches.opt_str("c") {
-        shrunx(cmd, &stage);
+        shrunx(cmd, &stage, verbose);
         std::process::exit(0);
     }
     loop {
         match getcmd() {
             Err(_) => break,
-            Ok(cmd) => shrunx(cmd, &stage),
+            Ok(cmd) => shrunx(cmd, &stage, verbose),
         }
     }
 }
 
 /// Interprets a single shell input line.
-fn shrunx(cmd: String, stage: &String) {
-    match shrun(cmd, stage) {
+fn shrunx(cmd: String, stage: &String, verbose: bool) {
+    match shrun(cmd, stage, verbose) {
         Ok(_) => (),
         Err(err) => eprintln!("xv6sh: error: {}", err),
     }
 }
 
 /// Interprets a single shell input line.
-fn shrun(cmd: String, stage: &String) -> Result<()> {
+fn shrun(cmd: String, stage: &String, verbose: bool) -> Result<()> {
     process::collect(); // ensure we don't leave zombies around
     let tokens = lexer::scan(cmd);
     if stage == "scan" {
@@ -65,12 +66,13 @@ fn shrun(cmd: String, stage: &String) -> Result<()> {
         println!("{:#?}", tree);
         return Ok(());
     }
-    let loc = translator::translate(tree, interp::is_verbose())?;
+    let loc = translator::translate(tree, verbose)?;
     if stage == "plan" {
         println!("{:#?}", loc);
         return Ok(());
     }
-    interp::interpret(loc)
+    let interp = interp::Interpreter::new(verbose);
+    interp.run(loc)
 }
 
 /// Reads a command from the standard input.

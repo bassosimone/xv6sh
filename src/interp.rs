@@ -13,25 +13,6 @@ use std::collections::VecDeque;
 use std::convert::Into;
 use std::fs::{File, OpenOptions};
 use std::process::{Child, Stdio};
-use std::sync::atomic::{AtomicUsize, Ordering};
-
-static VERBOSE: AtomicUsize = AtomicUsize::new(0);
-
-/// Returns whether the interpreter is verbose.
-pub fn is_verbose() -> bool {
-    return VERBOSE.load(Ordering::Acquire) > 0;
-}
-
-/// Configures the interpreter to be verbose.
-pub fn set_verbose() {
-    VERBOSE.store(1, std::sync::atomic::Ordering::SeqCst);
-}
-
-/// Interprets the given ListOfCommands
-pub fn interpret(loc: ListOfCommands) -> Result<()> {
-    let interp = Interpreter::new(is_verbose());
-    interp.run(loc)
-}
 
 /// Interprets the given ListOfCommands
 pub struct Interpreter {
