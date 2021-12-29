@@ -1,8 +1,9 @@
-//! Background processes management.
+//! Processes management code.
 
+use crate::model::{Error, Result};
 use once_cell::sync::Lazy;
 use std::collections::VecDeque;
-use std::process::Child;
+use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 
 /// adds a process to the pool of processes we manage.
@@ -31,8 +32,32 @@ pub fn collect() {
     MANAGER.lock().unwrap().collect();
 }
 
+/// Common code for spawning a child process.
+pub fn spawn<T1: Into<Stdio>, T2: Into<Stdio>>(
+    argv0: String,
+    mut args: VecDeque<String>,
+    stdin: Option<T1>,
+    stdout: Option<T2>,
+) -> Result<Child> {
+    let mut cmd = Command::new(argv0);
+    while args.len() > 0 {
+        let arg = args.pop_front().unwrap(); // cannot fail
+        cmd.arg(arg);
+    }
+    if let Some(filep) = stdin {
+        cmd.stdin(filep);
+    }
+    if let Some(filep) = stdout {
+        cmd.stdout(filep);
+    }
+    match cmd.spawn() {
+        Err(err) => return Err(Error::new(&err.to_string())),
+        Ok(child) => Ok(child),
+    }
+}
+
 /// Something that we could periodically check whether it has terminated.
-trait TryWaitable {
+pub trait TryWaitable {
     fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>>;
 }
 

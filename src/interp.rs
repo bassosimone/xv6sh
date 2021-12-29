@@ -1,9 +1,9 @@
 //! Interprets the executable syntax tree generated
 //! by the translator module (translator.rs).
 
-use crate::background;
 use crate::model::{Error, Result};
 use crate::parser::{InputRedir, OutputRedir};
+use crate::process;
 use crate::translator::{
     CompoundSerialCommand, FilterCommand, ListOfCommands, PipelinedCommands, SingleCommand,
     SinkCommand, SourceCommand,
@@ -12,7 +12,7 @@ use os_pipe::{pipe, PipeReader, PipeWriter};
 use std::collections::VecDeque;
 use std::convert::Into;
 use std::fs::{File, OpenOptions};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Interprets the given ListOfCommands
@@ -58,7 +58,7 @@ fn single_command(mut sc: SingleCommand) -> Result<()> {
     if sc.sync {
         let _ = chld.wait(); // we don't care about the return value
     } else {
-        background::add(chld);
+        process::add(chld);
     }
     Ok(())
 }
@@ -108,7 +108,7 @@ fn pipelined_commands(pc: PipelinedCommands) -> Result<()> {
     if pc.sync {
         wait_for_children(children);
     } else {
-        background::addq(children);
+        process::addq(children);
     }
     Ok(())
 }
@@ -197,26 +197,12 @@ fn maybe_redirect_output(output: &Option<OutputRedir>) -> Result<Option<File>> {
 /// Common code for executing a child process.
 fn common_executor<T1: Into<Stdio>, T2: Into<Stdio>>(
     argv0: String,
-    mut args: VecDeque<String>,
+    args: VecDeque<String>,
     stdin: Option<T1>,
     stdout: Option<T2>,
 ) -> Result<Child> {
     maybe_debug(&argv0, &args);
-    let mut cmd = Command::new(argv0);
-    while args.len() > 0 {
-        let arg = args.pop_front().unwrap(); // cannot fail
-        cmd.arg(arg);
-    }
-    if let Some(filep) = stdin {
-        cmd.stdin(filep);
-    }
-    if let Some(filep) = stdout {
-        cmd.stdout(filep);
-    }
-    match cmd.spawn() {
-        Err(err) => return Err(Error::new(&err.to_string())),
-        Ok(child) => Ok(child),
-    }
+    process::spawn(argv0, args, stdin, stdout)
 }
 
 static VERBOSE: AtomicUsize = AtomicUsize::new(0);

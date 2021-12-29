@@ -1,10 +1,10 @@
 //! Unix v6-like shell written in rust.
 
-mod background;
 mod interp;
 mod lexer;
 mod model;
 mod parser;
+mod process;
 mod serializer;
 mod translator;
 
@@ -54,7 +54,7 @@ fn shrunx(cmd: String, stage: &String) {
 
 /// Interprets a single shell input line.
 fn shrun(cmd: String, stage: &String) -> Result<()> {
-    background::collect(); // ensure we don't leave zombies around
+    process::collect(); // ensure we don't leave zombies around
     let tokens = lexer::scan(cmd);
     if stage == "scan" {
         println!("{:#?}", tokens);
