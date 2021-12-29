@@ -9,7 +9,7 @@ mod serializer;
 mod translator;
 
 use crate::model::{Error, Result};
-use crate::process::Manager;
+use crate::process::PeriodicReaper;
 
 /// Main function.
 fn main() {
@@ -34,30 +34,30 @@ fn main() {
         verbose = true;
     }
     let stage = matches.opt_str("stage").or(Some(String::new())).unwrap();
-    let mut manager = Manager::new();
+    let mut reaper = PeriodicReaper::new();
     if let Some(cmd) = matches.opt_str("c") {
-        shrunx(&mut manager, cmd, &stage, verbose);
+        shrunx(&mut reaper, cmd, &stage, verbose);
         std::process::exit(0);
     }
     loop {
         match getcmd() {
             Err(_) => break,
-            Ok(cmd) => shrunx(&mut manager, cmd, &stage, verbose),
+            Ok(cmd) => shrunx(&mut reaper, cmd, &stage, verbose),
         }
     }
 }
 
 /// Interprets a single shell input line.
-fn shrunx(manager: &mut Manager, cmd: String, stage: &String, verbose: bool) {
-    match shrun(manager, cmd, stage, verbose) {
+fn shrunx(reaper: &mut PeriodicReaper, cmd: String, stage: &String, verbose: bool) {
+    match shrun(reaper, cmd, stage, verbose) {
         Ok(_) => (),
         Err(err) => eprintln!("xv6sh: error: {}", err),
     }
 }
 
 /// Interprets a single shell input line.
-fn shrun(manager: &mut Manager, cmd: String, stage: &String, verbose: bool) -> Result<()> {
-    manager.collect(); // ensure we don't leave zombies around
+fn shrun(reaper: &mut PeriodicReaper, cmd: String, stage: &String, verbose: bool) -> Result<()> {
+    reaper.reap(); // ensure we don't leave zombies around
     let tokens = lexer::scan(cmd);
     if stage == "scan" {
         println!("{:#?}", tokens);
@@ -74,7 +74,7 @@ fn shrun(manager: &mut Manager, cmd: String, stage: &String, verbose: bool) -> R
         return Ok(());
     }
     let interp = interp::Interpreter::new(verbose);
-    interp.run(loc, manager)
+    interp.run(loc, reaper)
 }
 
 /// Reads a command from the standard input.

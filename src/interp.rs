@@ -1,9 +1,9 @@
 //! Interprets the executable syntax tree generated
 //! by the translator module (translator.rs).
 
-use crate::model::{Error, Result};
+use crate::model::{Error, ProcessSpawner, Result};
 use crate::parser::{InputRedir, OutputRedir};
-use crate::process::{Executor, Manager};
+use crate::process::{Group, PeriodicReaper, Spawner};
 use crate::translator::{
     CompoundSerialCommand, FilterCommand, ListOfCommands, PipelinedCommands, SingleCommand,
     SinkCommand, SourceCommand,
@@ -16,22 +16,31 @@ use std::process::{Command, Stdio};
 
 /// Interprets the given ListOfCommands
 pub struct Interpreter {
+    spawner: Box<dyn ProcessSpawner>,
     verbose: bool,
 }
 
 impl Interpreter {
     /// Creates a new interpreter.
     pub fn new(verbose: bool) -> Interpreter {
-        Interpreter { verbose: verbose }
+        Self::new_with_spawner(verbose, Spawner::new())
+    }
+
+    /// Creates a new interpreter with the given spawner.
+    pub fn new_with_spawner(verbose: bool, spawner: Box<dyn ProcessSpawner>) -> Interpreter {
+        Interpreter {
+            spawner: spawner,
+            verbose: verbose,
+        }
     }
 
     /// Runs the interpreter
-    pub fn run(self: &Self, mut loc: ListOfCommands, manager: &mut Manager) -> Result<()> {
+    pub fn run(self: &Self, mut loc: ListOfCommands, reaper: &mut PeriodicReaper) -> Result<()> {
         loop {
             match loc.pipelines.pop_front() {
                 None => return Ok(()),
                 Some(p) => {
-                    self.compound_serial_command(p, manager)?;
+                    self.compound_serial_command(p, reaper)?;
                     continue;
                 }
             }
@@ -42,16 +51,20 @@ impl Interpreter {
     fn compound_serial_command(
         self: &Self,
         csc: CompoundSerialCommand,
-        manager: &mut Manager,
+        reaper: &mut PeriodicReaper,
     ) -> Result<()> {
         match csc {
-            CompoundSerialCommand::SingleCommand(sc) => self.single_command(sc, manager),
-            CompoundSerialCommand::PipelinedCommands(pc) => self.pipelined_commands(pc, manager),
+            CompoundSerialCommand::SingleCommand(sc) => self.single_command(sc, reaper),
+            CompoundSerialCommand::PipelinedCommands(pc) => self.pipelined_commands(pc, reaper),
         }
     }
 
     /// Executes a SingleCommand
-    fn single_command(self: &Self, mut sc: SingleCommand, manager: &mut Manager) -> Result<()> {
+    fn single_command(
+        self: &Self,
+        mut sc: SingleCommand,
+        reaper: &mut PeriodicReaper,
+    ) -> Result<()> {
         // Implementation note: we only check for builtin commands
         // when we're not in pipeline context - is this correct?
         if sc.arguments.len() < 1 {
@@ -68,10 +81,10 @@ impl Interpreter {
         }
         let rin = Self::maybe_redirect_input(&sc.input)?;
         let rout = Self::maybe_redirect_output(&sc.output)?;
-        let mut executor = Executor::new(manager);
-        self.exec(&mut executor, argv0, sc.arguments, rin, rout)?;
+        let mut group = Group::new(reaper);
+        self.exec(&mut group, argv0, sc.arguments, rin, rout)?;
         if sc.sync {
-            executor.wait_for_children();
+            group.wait();
         }
         Ok(())
     }
@@ -90,47 +103,47 @@ impl Interpreter {
     }
 
     /// Executes a pipeline of commands with at least a source and a sink
-    fn pipelined_commands(self: &Self, pc: PipelinedCommands, manager: &mut Manager) -> Result<()> {
+    fn pipelined_commands(
+        self: &Self,
+        pc: PipelinedCommands,
+        reaper: &mut PeriodicReaper,
+    ) -> Result<()> {
         let mut rxall = VecDeque::<PipeReader>::new();
-        let mut executor = Executor::new(manager);
+        let mut group = Group::new(reaper);
         let source = pc.source;
-        let rx = self.source_command(&mut executor, source)?;
+        let rx = self.source_command(&mut group, source)?;
         rxall.push_back(rx);
         for filter in pc.filters {
-            match self.filter_command(&mut executor, filter, rxall.pop_back().unwrap()) {
+            match self.filter_command(&mut group, filter, rxall.pop_back().unwrap()) {
                 Err(err) => {
-                    executor.kill_children();
+                    group.kill_and_wait();
                     return Err(Error::new(&err.to_string()));
                 }
                 Ok(rx) => rxall.push_back(rx),
             }
         }
-        match self.sink_command(&mut executor, pc.sink, rxall.pop_back().unwrap()) {
+        match self.sink_command(&mut group, pc.sink, rxall.pop_back().unwrap()) {
             Err(err) => {
-                executor.kill_children();
+                group.kill_and_wait();
                 return Err(Error::new(&err.to_string()));
             }
             Ok(_) => (),
         }
         if pc.sync {
-            executor.wait_for_children();
+            group.wait();
         }
         Ok(())
     }
 
     /// Executes the source command of the pipeline
-    fn source_command(
-        self: &Self,
-        executor: &mut Executor,
-        mut sc: SourceCommand,
-    ) -> Result<PipeReader> {
+    fn source_command(self: &Self, group: &mut Group, mut sc: SourceCommand) -> Result<PipeReader> {
         if sc.arguments.len() < 1 {
             return Err(Error::new("pipeline with empty source command"));
         }
         let argv0 = sc.arguments.pop_front().unwrap(); // cannot fail
         let rin = Self::maybe_redirect_input(&sc.input)?;
         let (crx, cwx) = Self::wrap_os_pipe()?;
-        match self.exec(executor, argv0, sc.arguments, rin, Some(cwx)) {
+        match self.exec(group, argv0, sc.arguments, rin, Some(cwx)) {
             Err(err) => Err(err),
             Ok(_) => Ok(crx),
         }
@@ -139,7 +152,7 @@ impl Interpreter {
     /// Executes a filter command of a pipeline
     fn filter_command(
         self: &Self,
-        executor: &mut Executor,
+        group: &mut Group,
         mut fc: FilterCommand,
         rx: PipeReader,
     ) -> Result<PipeReader> {
@@ -148,7 +161,7 @@ impl Interpreter {
         }
         let argv0 = fc.arguments.pop_front().unwrap(); // cannot fail
         let (crx, cwx) = Self::wrap_os_pipe()?;
-        match self.exec(executor, argv0, fc.arguments, Some(rx), Some(cwx)) {
+        match self.exec(group, argv0, fc.arguments, Some(rx), Some(cwx)) {
             Err(err) => Err(err),
             Ok(_) => Ok(crx),
         }
@@ -157,7 +170,7 @@ impl Interpreter {
     /// Executes the sink command of a pipeline
     fn sink_command(
         self: &Self,
-        executor: &mut Executor,
+        group: &mut Group,
         mut sc: SinkCommand,
         rx: PipeReader,
     ) -> Result<()> {
@@ -166,7 +179,7 @@ impl Interpreter {
         }
         let argv0 = sc.arguments.pop_front().unwrap(); // cannot fail
         let rou = Self::maybe_redirect_output(&sc.output)?;
-        self.exec(executor, argv0, sc.arguments, Some(rx), rou)
+        self.exec(group, argv0, sc.arguments, Some(rx), rou)
     }
 
     /// Creates the input redirection if needed.
@@ -199,7 +212,7 @@ impl Interpreter {
     /// Common code for executing a child process.
     fn exec<T1: Into<Stdio>, T2: Into<Stdio>>(
         self: &Self,
-        executor: &mut Executor,
+        group: &mut Group,
         argv0: String,
         mut args: VecDeque<String>,
         stdin: Option<T1>,
@@ -217,7 +230,9 @@ impl Interpreter {
         if let Some(filep) = stdout {
             cmd.stdout(filep);
         }
-        executor.spawn(cmd)
+        let proc = self.spawner.spawn(cmd)?;
+        group.add(proc); // ensure we track the child
+        Ok(())
     }
 
     /// Possibly log to stderr the commands we're about to execute.
