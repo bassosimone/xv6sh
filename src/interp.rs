@@ -3,7 +3,7 @@
 
 use crate::model::{Error, Result};
 use crate::parser::{InputRedir, OutputRedir};
-use crate::process::Executor;
+use crate::process::{Executor, Manager};
 use crate::translator::{
     CompoundSerialCommand, FilterCommand, ListOfCommands, PipelinedCommands, SingleCommand,
     SinkCommand, SourceCommand,
@@ -26,12 +26,12 @@ impl Interpreter {
     }
 
     /// Runs the interpreter
-    pub fn run(self: &Self, mut loc: ListOfCommands) -> Result<()> {
+    pub fn run(self: &Self, mut loc: ListOfCommands, manager: &mut Manager) -> Result<()> {
         loop {
             match loc.pipelines.pop_front() {
                 None => return Ok(()),
                 Some(p) => {
-                    self.compound_serial_command(p)?;
+                    self.compound_serial_command(p, manager)?;
                     continue;
                 }
             }
@@ -39,15 +39,19 @@ impl Interpreter {
     }
 
     /// Executes a CompoundSerialCommand
-    fn compound_serial_command(self: &Self, csc: CompoundSerialCommand) -> Result<()> {
+    fn compound_serial_command(
+        self: &Self,
+        csc: CompoundSerialCommand,
+        manager: &mut Manager,
+    ) -> Result<()> {
         match csc {
-            CompoundSerialCommand::SingleCommand(sc) => self.single_command(sc),
-            CompoundSerialCommand::PipelinedCommands(pc) => self.pipelined_commands(pc),
+            CompoundSerialCommand::SingleCommand(sc) => self.single_command(sc, manager),
+            CompoundSerialCommand::PipelinedCommands(pc) => self.pipelined_commands(pc, manager),
         }
     }
 
     /// Executes a SingleCommand
-    fn single_command(self: &Self, mut sc: SingleCommand) -> Result<()> {
+    fn single_command(self: &Self, mut sc: SingleCommand, manager: &mut Manager) -> Result<()> {
         // Implementation note: we only check for builtin commands
         // when we're not in pipeline context - is this correct?
         if sc.arguments.len() < 1 {
@@ -64,7 +68,7 @@ impl Interpreter {
         }
         let rin = Self::maybe_redirect_input(&sc.input)?;
         let rout = Self::maybe_redirect_output(&sc.output)?;
-        let mut executor = Executor::new();
+        let mut executor = Executor::new(manager);
         self.exec(&mut executor, argv0, sc.arguments, rin, rout)?;
         if sc.sync {
             executor.wait_for_children();
@@ -86,9 +90,9 @@ impl Interpreter {
     }
 
     /// Executes a pipeline of commands with at least a source and a sink
-    fn pipelined_commands(self: &Self, pc: PipelinedCommands) -> Result<()> {
+    fn pipelined_commands(self: &Self, pc: PipelinedCommands, manager: &mut Manager) -> Result<()> {
         let mut rxall = VecDeque::<PipeReader>::new();
-        let mut executor = Executor::new();
+        let mut executor = Executor::new(manager);
         let source = pc.source;
         let rx = self.source_command(&mut executor, source)?;
         rxall.push_back(rx);

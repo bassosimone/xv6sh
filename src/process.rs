@@ -1,60 +1,29 @@
 //! Processes management code.
 
 use crate::model::{Error, Result};
-use once_cell::sync::Lazy;
 use std::collections::VecDeque;
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
-
-/// adds a process to the pool of processes we manage.
-pub fn add(proc: Child) {
-    MANAGER.lock().unwrap().add(ChildWrapper { child: proc });
-}
-
-/// collects terminated processes.
-pub fn collect() {
-    MANAGER.lock().unwrap().collect();
-}
-
-/// Something that we could periodically check whether it has terminated.
-pub trait TryWaitable {
-    fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>>;
-}
-
-/// Wraps a Child process.
-struct ChildWrapper {
-    pub child: Child,
-}
-
-impl TryWaitable for ChildWrapper {
-    fn try_wait(&mut self) -> std::io::Result<Option<std::process::ExitStatus>> {
-        self.child.try_wait()
-    }
-}
 
 /// A Manager for background processes.
-struct Manager<T: TryWaitable> {
-    pub procs: VecDeque<T>,
+pub struct Manager {
+    procs: VecDeque<Child>,
 }
 
-/// The global process manager.
-static MANAGER: Lazy<Mutex<Manager<ChildWrapper>>> = Lazy::new(|| Mutex::new(Manager::new()));
-
-impl<T: TryWaitable> Manager<T> {
+impl Manager {
     /// creates a new process manager.
-    fn new() -> Manager<T> {
+    pub fn new() -> Manager {
         Manager {
             procs: VecDeque::<_>::new(),
         }
     }
 
     /// adds a process to the pool of processes we manage.
-    fn add(self: &mut Self, proc: T) {
+    fn add(self: &mut Self, proc: Child) {
         self.procs.push_back(proc);
     }
 
     /// collects terminated processes.
-    fn collect(self: &mut Self) {
+    pub fn collect(self: &mut Self) {
         let mut running = VecDeque::<_>::new();
         while self.procs.len() > 0 {
             let mut cur = self.procs.pop_front().unwrap(); // cannot fail
@@ -71,15 +40,17 @@ impl<T: TryWaitable> Manager<T> {
 }
 
 /// Executes one or more processes.
-pub struct Executor {
+pub struct Executor<'a> {
     children: VecDeque<Child>,
+    manager: &'a mut Manager,
 }
 
-impl Executor {
+impl<'a> Executor<'a> {
     /// Creates a new Executor.
-    pub fn new() -> Executor {
+    pub fn new(manager: &'a mut Manager) -> Executor<'a> {
         Executor {
             children: VecDeque::<_>::new(),
+            manager: manager,
         }
     }
 
@@ -129,12 +100,11 @@ impl Executor {
     }
 }
 
-impl Drop for Executor {
+impl<'a> Drop for Executor<'a> {
     /// ensures we kill the children at a later time.
     fn drop(&mut self) {
-        // TODO(bassosimone): this is currently very implicit
         while self.children.len() > 0 {
-            add(self.children.pop_front().unwrap());
+            self.manager.add(self.children.pop_front().unwrap());
         }
     }
 }

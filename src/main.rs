@@ -9,6 +9,7 @@ mod serializer;
 mod translator;
 
 use crate::model::{Error, Result};
+use crate::process::Manager;
 
 /// Main function.
 fn main() {
@@ -33,29 +34,30 @@ fn main() {
         verbose = true;
     }
     let stage = matches.opt_str("stage").or(Some(String::new())).unwrap();
+    let mut manager = Manager::new();
     if let Some(cmd) = matches.opt_str("c") {
-        shrunx(cmd, &stage, verbose);
+        shrunx(&mut manager, cmd, &stage, verbose);
         std::process::exit(0);
     }
     loop {
         match getcmd() {
             Err(_) => break,
-            Ok(cmd) => shrunx(cmd, &stage, verbose),
+            Ok(cmd) => shrunx(&mut manager, cmd, &stage, verbose),
         }
     }
 }
 
 /// Interprets a single shell input line.
-fn shrunx(cmd: String, stage: &String, verbose: bool) {
-    match shrun(cmd, stage, verbose) {
+fn shrunx(manager: &mut Manager, cmd: String, stage: &String, verbose: bool) {
+    match shrun(manager, cmd, stage, verbose) {
         Ok(_) => (),
         Err(err) => eprintln!("xv6sh: error: {}", err),
     }
 }
 
 /// Interprets a single shell input line.
-fn shrun(cmd: String, stage: &String, verbose: bool) -> Result<()> {
-    process::collect(); // ensure we don't leave zombies around
+fn shrun(manager: &mut Manager, cmd: String, stage: &String, verbose: bool) -> Result<()> {
+    manager.collect(); // ensure we don't leave zombies around
     let tokens = lexer::scan(cmd);
     if stage == "scan" {
         println!("{:#?}", tokens);
@@ -72,7 +74,7 @@ fn shrun(cmd: String, stage: &String, verbose: bool) -> Result<()> {
         return Ok(());
     }
     let interp = interp::Interpreter::new(verbose);
-    interp.run(loc)
+    interp.run(loc, manager)
 }
 
 /// Reads a command from the standard input.
